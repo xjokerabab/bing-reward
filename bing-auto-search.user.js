@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.3
+// @version      v2.5.4
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
@@ -634,41 +634,50 @@
             }
         }, 1000);
 
-        await new Promise(resolve => {
-            if (isPaused || !isRunning) {
-                resolve();
-                return;
-            }
-            const waitTime = Math.floor(delaySeconds * 1000 * 0.6);
-            const timeoutId = setTimeout(resolve, waitTime);
-
-            const safetyCheck = setInterval(() => {
-                if (remaining <= 0 || !isRunning || isPaused) {
-                    clearTimeout(timeoutId);
-                    clearInterval(safetyCheck);
-                    resolve();
-                }
-            }, 1000);
-        });
-
-        if (isPaused || !isRunning) return;
-
-        await new Promise(resolve => {
-            if (isPaused || !isRunning) {
-                resolve();
-                return;
-            }
-            const waitTime = Math.floor(delaySeconds * 1000 * 0.4);
-            const timeoutId = setTimeout(resolve, waitTime);
-
-            const safetyCheck = setInterval(() => {
-                if (remaining <= 0 || !isRunning || isPaused) {
-                    clearTimeout(timeoutId);
-                    clearInterval(safetyCheck);
-                    resolve();
-                }
-            }, 1000);
-        });
+        // 去除await，改为setTimeout实现同步等待
+        setTimeout(() => {
+            if (isPaused || !isRunning) return;
+            setTimeout(() => {
+                if (isPaused || !isRunning) return;
+                executeNextSearchStep();
+            }, Math.floor(delaySeconds * 1000 * 0.4));
+        }, Math.floor(delaySeconds * 1000 * 0.6));
+        
+        // await new Promise(resolve => {
+        //     if (isPaused || !isRunning) {
+        //         resolve();
+        //         return;
+        //     }
+        //     const waitTime = Math.floor(delaySeconds * 1000 * 0.6);
+        //     const timeoutId = setTimeout(resolve, waitTime);
+        //
+        //     const safetyCheck = setInterval(() => {
+        //         if (remaining <= 0 || !isRunning || isPaused) {
+        //             clearTimeout(timeoutId);
+        //             clearInterval(safetyCheck);
+        //             resolve();
+        //         }
+        //     }, 1000);
+        // });
+        //
+        // if (isPaused || !isRunning) return;
+        //
+        // await new Promise(resolve => {
+        //     if (isPaused || !isRunning) {
+        //         resolve();
+        //         return;
+        //     }
+        //     const waitTime = Math.floor(delaySeconds * 1000 * 0.4);
+        //     const timeoutId = setTimeout(resolve, waitTime);
+        //
+        //     const safetyCheck = setInterval(() => {
+        //         if (remaining <= 0 || !isRunning || isPaused) {
+        //             clearTimeout(timeoutId);
+        //             clearInterval(safetyCheck);
+        //             resolve();
+        //         }
+        //     }, 1000);
+        // });
 
         if (isPaused || !isRunning) return;
 
