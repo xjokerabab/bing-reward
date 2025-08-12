@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.2
+// @version      v2.5.3
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
@@ -572,7 +572,7 @@
     }
 
     // 搜索循环
-    async function performSearchCycle() {
+    function performSearchCycle() {
         if (scriptStopped) return;
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
@@ -699,7 +699,7 @@
     }
 
     // 开始搜索
-    async function startSearch() {
+    function startSearch() {
         if (scriptStopped) return;
         if (isRunning) return;
         isRunning = true;
@@ -735,9 +735,12 @@
 
             // 跳转到必应首页
             window.location.href = 'https://cn.bing.com/';
+            
+            // 等待5秒以确保页面跳转完成
+            setTimeout(() => {
+                console.log("等待5秒后继续执行");
+            }, 5000);
 
-            // 等待页面跳转，不执行后续逻辑
-            return;
         }
 
         // 不再使用异步热词获取
@@ -837,6 +840,7 @@
 
     // 停止搜索 - 彻底清理状态和移除面板
     function stopSearch() {
+        scriptStopped = true;
         isRunning = false;
         isPaused = false;
         if (countdownInterval) clearInterval(countdownInterval);
@@ -863,10 +867,11 @@
         updateStatus("已停止");
         updateProgress(currentSearchCount, sessionTotalSearches || 0);
 
-        closeControlPanelAndScript();
-        // // 彻底移除面板
-        // const panel = document.getElementById('autoSearchControlPanel');
-        // if (panel) panel.remove();
+        // 再次确保面板被移除
+        const panel1 = document.getElementById('autoSearchPanel');
+        const panel2 = document.getElementById('autoSearchControlPanel');
+        if (panel1) panel1.remove();
+        if (panel2) panel2.remove();
     }
 
 
