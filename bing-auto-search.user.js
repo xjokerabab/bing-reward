@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         国内必应自动搜索（修复手机版）
 // @namespace    http://tampermonkey.net/
-// @version      2.2
-// @description  修复首次启动需切换到首页问题，确保搜索流程连贯
+// @version      2.3
+// @description  修复首次启动需切换到首页问题
 // @author       Your Name
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -164,7 +164,7 @@
 
         panel.appendChild(buttonsDiv);
         document.body.appendChild(panel);
-        
+
         // 确保面板可见
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -246,10 +246,10 @@
         return optimized;
     }
 
-    // 从百度热榜获取PC端热词
+    // 从百度热榜获取PC端热词（新版接口）
     function getPcHotWords() {
         return new Promise((resolve, reject) => {
-            const hotListUrl = 'https://top.baidu.com/board?tab=realtime';
+            const hotListUrl = 'https://api.rebang.today/v1/items?tab=baidu&sub_tab=realtime&page=1&version=1';
 
             GM_xmlhttpRequest({
                 method: 'GET',
@@ -257,14 +257,21 @@
                 timeout: 10000, // 10秒超时
                 onload: function(response) {
                     try {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(response.responseText, 'text/html');
-                        const hotWordElements = doc.querySelectorAll('.c-single-text-ellipsis');
-
-                        let hotWords = Array.from(hotWordElements)
-                            .map(el => el.textContent.trim())
-                            .filter(word => word.length > 0)
-                            .map(word => optimizeHotWord(word))
+                        const result = JSON.parse(response.responseText);
+                        if (result.code !== 200 || !result.data || !result.data.list) {
+                            console.error('百度热榜API返回异常:', result);
+                            return resolve(getFallbackPcWords());
+                        }
+                        let items;
+                        try {
+                            items = JSON.parse(result.data.list);
+                        } catch (e) {
+                            console.error('解析百度热榜list数据失败:', e);
+                            return resolve(getFallbackPcWords());
+                        }
+                        let hotWords = items
+                            .filter(item => item && item.word && item.word.trim().length > 0)
+                            .map(item => optimizeHotWord(item.word))
                             .filter(word => word.length >= 3);
 
                         if (hotWords.length < 40) {
@@ -670,7 +677,7 @@
                                     isFirstSearch: false
                                 };
                                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
-                                
+
                                 if (detectDeviceType() === 'mobile') {
                                     const form = document.getElementById('sb_form');
                                     if (form) {
@@ -700,16 +707,16 @@
                                         bubbles: true
                                     });
                                     searchBox.dispatchEvent(enterEvent);
-                                    
+
                                     // 方法2：点击搜索按钮（备用方法，1秒后执行以防方法1失败）
                                     setTimeout(() => {
-                                        if (document.getElementById('sb_form_q') && 
+                                        if (document.getElementById('sb_form_q') &&
                                             document.getElementById('sb_form_q').value === query) {
                                             console.log("Enter键提交失败，尝试点击搜索按钮");
-                                            const searchButton = document.getElementById('sb_form_go') || 
-                                                              document.querySelector('input[type="submit"]') ||
-                                                              document.querySelector('.search-icon');
-                                            
+                                            const searchButton = document.getElementById('sb_form_go') ||
+                                                document.querySelector('input[type="submit"]') ||
+                                                document.querySelector('.search-icon');
+
                                             if (searchButton) {
                                                 searchButton.click();
                                             } else {
@@ -744,7 +751,7 @@
                 };
                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
                 window.location.href = searchUrl;
-                
+
                 // 对于直接跳转URL的情况，PC和移动端都添加浏览模拟
                 setTimeout(() => {
                     simulateSearchResultsBrowsing().then(() => {
@@ -880,9 +887,9 @@
 
     // 检查是否在必应首页
     function isOnBingHomepage() {
-        return window.location.href === 'https://cn.bing.com/' || 
-               window.location.href.startsWith('https://cn.bing.com/?') && 
-               !window.location.href.includes('/search');
+        return window.location.href === 'https://cn.bing.com/' ||
+            window.location.href.startsWith('https://cn.bing.com/?') &&
+            !window.location.href.includes('/search');
     }
 
     // 开始搜索
@@ -909,7 +916,7 @@
         // 首次搜索需要确保在必应首页
         if (isFirstSearch && !isOnBingHomepage()) {
             updateStatus("正在切换到必应首页...");
-            
+
             // 保存当前状态以便页面跳转后恢复
             localStorage.setItem('bingAutoSearchState', JSON.stringify({
                 isRunning: isRunning,
@@ -918,10 +925,10 @@
                 isFirstSearch: isFirstSearch,
                 needInitialize: true
             }));
-            
+
             // 跳转到必应首页
             window.location.href = 'https://cn.bing.com/';
-            
+
             // 等待页面跳转，不执行后续逻辑
             return;
         }
@@ -1051,7 +1058,7 @@
 
         updateStatus("已停止");
         updateProgress(currentSearchCount, sessionTotalSearches || 0);
-        
+
         // 关闭控制面板
         const panel = document.getElementById('autoSearchControlPanel');
         if (panel) {
@@ -1071,14 +1078,14 @@
 
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
-            const { 
-                isRunning: savedRunning, 
-                currentSearchCount: savedCount, 
+            const {
+                isRunning: savedRunning,
+                currentSearchCount: savedCount,
                 totalSearches: savedTotal,
                 isFirstSearch: savedFirst,
                 needInitialize: needInit
             } = JSON.parse(savedState);
-            
+
             if (savedRunning) {
                 isRunning = true;
                 currentSearchCount = savedCount;
@@ -1088,7 +1095,7 @@
 
                 // 确保控制面板存在
                 createControlPanel();
-                
+
                 const startBtn = document.getElementById('startSearchBtn');
                 const pauseBtn = document.getElementById('pauseSearchBtn');
                 const stopBtn = document.getElementById('stopSearchBtn');
@@ -1104,7 +1111,7 @@
                 updateStatus("运行中 - 恢复搜索");
 
                 // 如果需要初始化（刚跳转到首页），直接执行初始化流程
-                if (needInitialize) {
+                if (needInit) {
                     deviceType = detectDeviceType();
                     (async () => {
                         try {
@@ -1115,11 +1122,20 @@
                                 totalSearches = 30;
                                 hotWords = await getRandomMobileHotWords();
                             }
+                            // 初始化流程后，清除 needInitialize 标记，避免卡住
                             initializeSearchProcess();
+                            // 修复：初始化后将 needInitialize 标记为 false
+                            const state = JSON.parse(localStorage.getItem('bingAutoSearchState') || '{}');
+                            state.needInitialize = false;
+                            localStorage.setItem('bingAutoSearchState', JSON.stringify(state));
                         } catch (e) {
                             updateStatus("热词获取失败，使用备用方案");
                             hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileWords();
                             initializeSearchProcess();
+                            // 同样修复 needInitialize 标记
+                            const state = JSON.parse(localStorage.getItem('bingAutoSearchState') || '{}');
+                            state.needInitialize = false;
+                            localStorage.setItem('bingAutoSearchState', JSON.stringify(state));
                         }
                     })();
                 } else {
@@ -1187,7 +1203,7 @@
                     document.documentElement.offsetHeight
                 );
                 let scrollPosition;
-                
+
                 if (isMobile) {
                     // 移动端滑动逻辑保持不变
                     if (step % 2 === 0) {
@@ -1217,7 +1233,7 @@
                         );
                     }
                 }
-                
+
                 window.scrollTo({ top: scrollPosition, behavior: 'smooth' });
                 step++;
             }, intervalBetweenSteps);
@@ -1237,7 +1253,7 @@
                 panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }, 's');
-        
+
         GM_registerMenuCommand('关闭面板', function () {
             closeControlPanelAndScript();
         }, 'c');
@@ -1258,4 +1274,3 @@
         updateStatus('已停止');
     }
 })();
-    
