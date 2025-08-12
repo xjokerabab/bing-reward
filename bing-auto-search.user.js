@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         国内必应自动搜索（修复手机版）
 // @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  修复手机浏览器卡住问题和控制面板不显示问题，确保搜索流程连贯
+// @version      2.2
+// @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Your Name
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -878,6 +878,13 @@
         performSearch(randomWord);
     }
 
+    // 检查是否在必应首页
+    function isOnBingHomepage() {
+        return window.location.href === 'https://cn.bing.com/' || 
+               window.location.href.startsWith('https://cn.bing.com/?') && 
+               !window.location.href.includes('/search');
+    }
+
     // 开始搜索
     async function startSearch() {
         if (isRunning) return;
@@ -898,6 +905,26 @@
 
         deviceType = detectDeviceType();
         console.log(`设备类型: ${deviceType}`);
+
+        // 首次搜索需要确保在必应首页
+        if (isFirstSearch && !isOnBingHomepage()) {
+            updateStatus("正在切换到必应首页...");
+            
+            // 保存当前状态以便页面跳转后恢复
+            localStorage.setItem('bingAutoSearchState', JSON.stringify({
+                isRunning: isRunning,
+                currentSearchCount: currentSearchCount,
+                totalSearches: totalSearches,
+                isFirstSearch: isFirstSearch,
+                needInitialize: true
+            }));
+            
+            // 跳转到必应首页
+            window.location.href = 'https://cn.bing.com/';
+            
+            // 等待页面跳转，不执行后续逻辑
+            return;
+        }
 
         clearTimeout(hotWordFetchTimeout);
         hotWordFetchTimeout = setTimeout(() => {
@@ -960,7 +987,8 @@
                 isRunning: isRunning,
                 currentSearchCount: currentSearchCount,
                 totalSearches: totalSearches,
-                isFirstSearch: isFirstSearch
+                isFirstSearch: isFirstSearch,
+                needInitialize: false
             }));
 
             updateStatus("开始搜索流程");
@@ -979,7 +1007,8 @@
             isRunning: isRunning,
             currentSearchCount: currentSearchCount,
             totalSearches: totalSearches,
-            isFirstSearch: isFirstSearch
+            isFirstSearch: isFirstSearch,
+            needInitialize: false
         }));
 
         if (isPaused) {
@@ -1042,11 +1071,19 @@
 
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
-            const { isRunning: savedRunning, currentSearchCount: savedCount, totalSearches: savedTotal } = JSON.parse(savedState);
+            const { 
+                isRunning: savedRunning, 
+                currentSearchCount: savedCount, 
+                totalSearches: savedTotal,
+                isFirstSearch: savedFirst,
+                needInitialize: needInit
+            } = JSON.parse(savedState);
+            
             if (savedRunning) {
                 isRunning = true;
                 currentSearchCount = savedCount;
                 totalSearches = savedTotal;
+                isFirstSearch = savedFirst;
                 sessionTotalSearches = savedTotal;
 
                 // 确保控制面板存在
@@ -1066,20 +1103,41 @@
 
                 updateStatus("运行中 - 恢复搜索");
 
-                setTimeout(() => {
+                // 如果需要初始化（刚跳转到首页），直接执行初始化流程
+                if (needInitialize) {
                     deviceType = detectDeviceType();
-                    if (deviceType === 'pc') {
-                        getPcHotWords().then(words => {
-                            hotWords = words;
-                            performSearchCycle();
-                        });
-                    } else {
-                        getMobileHotWords().then(words => {
-                            hotWords = words;
-                            performSearchCycle();
-                        });
-                    }
-                }, 1000);
+                    (async () => {
+                        try {
+                            if (deviceType === 'pc') {
+                                totalSearches = 40;
+                                hotWords = await getRandomPcHotWords();
+                            } else {
+                                totalSearches = 30;
+                                hotWords = await getRandomMobileHotWords();
+                            }
+                            initializeSearchProcess();
+                        } catch (e) {
+                            updateStatus("热词获取失败，使用备用方案");
+                            hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileWords();
+                            initializeSearchProcess();
+                        }
+                    })();
+                } else {
+                    setTimeout(() => {
+                        deviceType = detectDeviceType();
+                        if (deviceType === 'pc') {
+                            getPcHotWords().then(words => {
+                                hotWords = words;
+                                performSearchCycle();
+                            });
+                        } else {
+                            getMobileHotWords().then(words => {
+                                hotWords = words;
+                                performSearchCycle();
+                            });
+                        }
+                    }, 1000);
+                }
             }
         }
     }
