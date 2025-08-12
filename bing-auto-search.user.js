@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索（修复手机版）
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Your Name
 // @match        https://cn.bing.com/*
@@ -575,6 +575,7 @@
 
     // 执行搜索
     function performSearch(query) {
+        if (scriptStopped) return;
         if (isPaused || !isRunning) return;
         if (!query || query.trim().length === 0) {
             console.error("无效的搜索词，跳过本次搜索");
@@ -711,6 +712,7 @@
 
     // 搜索循环
     async function performSearchCycle() {
+        if (scriptStopped) return;
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
             const { isRunning: savedRunning, currentSearchCount: savedCount, totalSearches: savedTotal } = JSON.parse(savedState);
@@ -814,6 +816,7 @@
 
     // 执行下一步搜索
     function executeNextSearchStep() {
+        if (scriptStopped) return;
         if (!isRunning || isPaused) return;
 
         if (countdownInterval) {
@@ -836,6 +839,7 @@
 
     // 开始搜索
     async function startSearch() {
+        if (scriptStopped) return;
         if (isRunning) return;
         isRunning = true;
         isPaused = false;
@@ -1025,7 +1029,7 @@
         if (panel2) panel2.remove();
     }
 
-    // 页面加载时只负责恢复面板和进度，不再异步获取热词
+    // 页面加载时只负责恢复面板和进度，不再异步获取热词和初始化
     function restoreStateOnLoad() {
         if (scriptStopped) return;
         const savedProgress = localStorage.getItem('bingAutoSearchProgress');
@@ -1134,7 +1138,7 @@
         }
     }
 
-    // 页面加载完成后初始化 - 只在这里获取热词和初始化
+    // 页面加载完成后初始化
     window.addEventListener('load', async () => {
         if (scriptStopped) return;
         createControlPanel();
@@ -1195,6 +1199,7 @@
 
     // 模拟用户上下滑动页面浏览（同时支持PC和移动端）
     function simulateSearchResultsBrowsing() {
+        if (scriptStopped) return Promise.resolve();
         return new Promise(resolve => {
             if (isPaused || !isRunning) {
                 resolve();
