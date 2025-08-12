@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.8
+// @version      v2.5.9
 // @description  确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
@@ -581,8 +581,10 @@
             return;
         }
 
-        await simulateSearchResultsBrowsing();
-        if (isPaused || !isRunning) return;
+        if (!isOnBingHomepage()) {
+            await simulateSearchResultsBrowsing();
+            if (isPaused || !isRunning) return;
+        }
 
         const delaySeconds = getRandomDelay();
         console.log(`第${currentSearchCount + 1}次搜索将在${delaySeconds}秒后进行`);
@@ -954,7 +956,7 @@
             const isMobile = detectDeviceType() === 'mobile';
             // 为PC端设置不同的滑动参数
             const scrollSteps = isMobile ? Math.floor(Math.random() * 4) + 4 : Math.floor(Math.random() * 6) + 4;
-            const totalBrowseTime = isMobile ? Math.floor(Math.random() * 4000) + 1000 : Math.floor(Math.random() * 5000) + 2000;
+            const totalBrowseTime = isMobile ? Math.floor(Math.random() * 3000) + 1000 : Math.floor(Math.random() * 3000) + 2000;
             const intervalBetweenSteps = totalBrowseTime / scrollSteps;
             let step = 0;
             let direction = 1;
