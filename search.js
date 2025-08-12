@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索（修复手机版）
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  修复手机浏览器卡住问题和控制面板不显示问题，确保搜索流程连贯
 // @author       Your Name
 // @match        https://cn.bing.com/*
@@ -971,7 +971,7 @@
         }
     }
 
-    // 停止搜索
+    // 停止搜索 - 新增面板关闭功能
     function stopSearch() {
         isRunning = false;
         isPaused = false;
@@ -995,6 +995,12 @@
 
         updateStatus("已停止");
         updateProgress(currentSearchCount, sessionTotalSearches || 0);
+        
+        // 关闭控制面板
+        const panel = document.getElementById('autoSearchControlPanel');
+        if (panel) {
+            panel.remove();
+        }
     }
 
     // 页面加载时恢复状态和进度
