@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.6
+// @version      v2.5.7
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
@@ -496,7 +496,7 @@
                                         });
                                         searchBox.dispatchEvent(enterEvent);
                                     }
-                                    setTimeout(performSearchCycle, 2000);
+                                    setTimeout(performSearchCycle, 1500);
                                 } else {
                                     // 方法1：模拟Enter键（主要方法）
                                     const enterEvent = new KeyboardEvent('keypress', {
@@ -526,13 +526,7 @@
                                             }
                                         }
                                     }, 1000);
-
-                                    // PC端也添加搜索结果浏览模拟
-                                    setTimeout(() => {
-                                        // 搜索完成后立即更新进度显示
-                                        updateProgress(currentSearchCount + 1, totalSearches);
-                                        setTimeout(performSearchCycle, 1500);
-                                    }, 2000);
+                                    setTimeout(performSearchCycle, 1500);
                                 }
                             }, Math.floor(Math.random() * 1500) + 500);
                         }
@@ -549,19 +543,15 @@
                 };
                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
                 window.location.href = searchUrl;
-
-                // 对于直接跳转URL的情况，PC和移动端都添加浏览模拟
-                setTimeout(() => {
-                    // 搜索完成后立即更新进度显示
-                    updateProgress(currentSearchCount + 1, totalSearches);
-                    setTimeout(performSearchCycle, 2000);
-                }, 3000);
+                setTimeout(performSearchCycle, 2000);
             }
         }, 500);
     }
 
     // 搜索循环
     async function performSearchCycle() {
+        currentSearchCount++;
+        updateProgress(currentSearchCount, totalSearches); // 搜索次数递增后立即刷新进度
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
             const {
@@ -642,10 +632,7 @@
             clearInterval(countdownInterval);
             countdownInterval = null;
         }
-
         const randomWord = getRandomItemAndRemove(hotWords);
-        currentSearchCount++;
-        updateProgress(currentSearchCount, totalSearches); // 搜索次数递增后立即刷新进度
         performSearch(randomWord);
     }
 
@@ -981,7 +968,7 @@
                 resolve();
                 return;
             }
-            updateStatus("正在浏览搜索结果...");
+            // updateStatus("正在浏览搜索结果...");
             const isMobile = detectDeviceType() === 'mobile';
             // 为PC端设置不同的滑动参数
             const scrollSteps = isMobile ? Math.floor(Math.random() * 4) + 4 : Math.floor(Math.random() * 6) + 4;
