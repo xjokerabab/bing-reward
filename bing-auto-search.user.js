@@ -496,11 +496,7 @@
                                         });
                                         searchBox.dispatchEvent(enterEvent);
                                     }
-                                    setTimeout(() => {
-                                        simulateSearchResultsBrowsing().then(() => {
-                                            setTimeout(performSearchCycle, 1200);
-                                        });
-                                    }, 2000);
+                                    setTimeout(performSearchCycle, 2000);
                                 } else {
                                     // 方法1：模拟Enter键（主要方法）
                                     const enterEvent = new KeyboardEvent('keypress', {
@@ -533,11 +529,9 @@
 
                                     // PC端也添加搜索结果浏览模拟
                                     setTimeout(() => {
-                                        simulateSearchResultsBrowsing().then(() => {
-                                            // 搜索完成后立即更新进度显示
-                                            updateProgress(currentSearchCount + 1, totalSearches);
-                                            setTimeout(performSearchCycle, 1500);
-                                        });
+                                        // 搜索完成后立即更新进度显示
+                                        updateProgress(currentSearchCount + 1, totalSearches);
+                                        setTimeout(performSearchCycle, 1500);
                                     }, 2000);
                                 }
                             }, Math.floor(Math.random() * 1500) + 500);
@@ -558,18 +552,16 @@
 
                 // 对于直接跳转URL的情况，PC和移动端都添加浏览模拟
                 setTimeout(() => {
-                    simulateSearchResultsBrowsing().then(() => {
-                        // 搜索完成后立即更新进度显示
-                        updateProgress(currentSearchCount + 1, totalSearches);
-                        setTimeout(performSearchCycle, 2000);
-                    });
+                    // 搜索完成后立即更新进度显示
+                    updateProgress(currentSearchCount + 1, totalSearches);
+                    setTimeout(performSearchCycle, 2000);
                 }, 3000);
             }
         }, 500);
     }
 
     // 搜索循环
-    function performSearchCycle() {
+    async function performSearchCycle() {
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
             const {
