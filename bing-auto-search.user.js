@@ -3,14 +3,12 @@
 // @namespace    http://tampermonkey.net/
 // @version      2.3
 // @description  修复首次启动需切换到首页问题
-// @author       Your Name
+// @author       Joker
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
-// @connect      top.baidu.com
 // @connect      rebang.today
-// @connect      ranks.hao.360.com
 // ==/UserScript==
 
 (function() {
