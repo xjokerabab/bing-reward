@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         国内必应自动搜索（修复版）
+// @name         国内必应自动搜索（修复搜索提交版）
 // @namespace    http://tampermonkey.net/
-// @version      0.9
-// @description  修复首次搜索后停止问题，完善进度保存机制
+// @version      1.0
+// @description  修复搜索框有词但不提交的问题，确保搜索流程连贯
 // @author       Your Name
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -23,7 +23,6 @@
     let hotWords = [];
     let deviceType = '';
     let sessionTotalSearches = 0;
-    // 新增：标记是否是首次搜索
     let isFirstSearch = true;
 
     // 创建控制面板
@@ -170,11 +169,10 @@
     // 更新进度显示
     function updateProgress(current, total) {
         document.getElementById('autoSearchProgress').textContent = `进度: ${current}/${total}`;
-        // 保存到localStorage，解决页面刷新后进度丢失问题
         localStorage.setItem('bingAutoSearchProgress', JSON.stringify({
             current: current,
             total: total,
-            timestamp: new Date().getTime() // 增加时间戳，确保数据新鲜
+            timestamp: new Date().getTime()
         }));
     }
 
@@ -426,81 +424,133 @@
         });
     }
 
-    // 执行搜索（关键修复：确保搜索后能继续循环）
+    // 执行搜索（重点修复搜索提交问题）
     function performSearch(query) {
         if (isPaused || !isRunning) return;
         
-        const searchBox = document.getElementById('sb_form_q');
-        if (searchBox) {
-            updateStatus(`搜索中: ${query}`);
+        // 确保搜索词有效
+        if (!query || query.trim().length === 0) {
+            console.error("无效的搜索词，跳过本次搜索");
+            updateStatus("搜索词无效，准备下一次");
+            setTimeout(performSearchCycle, 2000);
+            return;
+        }
+        
+        // 多次尝试获取搜索框，解决可能的加载延迟问题
+        let searchBoxAttempts = 0;
+        const maxAttempts = 5;
+        const searchBoxInterval = setInterval(() => {
+            const searchBox = document.getElementById('sb_form_q');
+            searchBoxAttempts++;
             
-            // 清空搜索框
-            searchBox.value = '';
-            searchBox.dispatchEvent(new Event('input', { bubbles: true }));
-            
-            // 模拟人类打字
-            let i = 0;
-            const typeInterval = setInterval(() => {
-                if (!isRunning || isPaused) {
-                    clearInterval(typeInterval);
-                    return;
-                }
+            if (searchBox) {
+                clearInterval(searchBoxInterval);
+                updateStatus(`搜索中: ${query}`);
                 
-                if (i < query.length) {
-                    searchBox.value += query[i];
+                // 确保搜索框可见并可交互
+                searchBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // 清空搜索框（带延迟确保操作生效）
+                setTimeout(() => {
+                    searchBox.value = '';
                     searchBox.dispatchEvent(new Event('input', { bubbles: true }));
-                    i++;
-                } else {
-                    clearInterval(typeInterval);
-                    // 输入完成后提交
-                    setTimeout(() => {
-                        if (!isRunning || isPaused) return;
-                        
-                        // 关键修复：保存当前状态，确保页面跳转后能恢复
-                        const currentState = {
-                            isRunning: isRunning,
-                            currentSearchCount: currentSearchCount,
-                            totalSearches: totalSearches,
-                            isFirstSearch: false // 首次搜索已完成
-                        };
-                        localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
-                        
-                        // 执行搜索提交
-                        if (Math.random() < 0.7) {
-                            searchBox.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true }));
-                        } else {
-                            const searchButton = document.getElementById('sb_form_go') || document.querySelector('input[type="submit"]');
-                            if (searchButton) {
-                                searchButton.click();
-                            } else {
-                                window.location.href = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
-                            }
+                    searchBox.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    // 模拟人类打字（改进版）
+                    let i = 0;
+                    const typeInterval = setInterval(() => {
+                        if (!isRunning || isPaused) {
+                            clearInterval(typeInterval);
+                            return;
                         }
                         
-                        // 关键修复：使用更可靠的方式确保循环继续
-                        // 即使页面跳转，也会在新页面加载时恢复
-                        setTimeout(performSearchCycle, 1000);
-                    }, Math.floor(Math.random() * 1500) + 500);
-                }
-            }, Math.floor(Math.random() * 150) + 50);
-        } else {
-            // 找不到搜索框时的处理
-            const searchUrl = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
-            // 保存状态后再跳转
-            const currentState = {
-                isRunning: isRunning,
-                currentSearchCount: currentSearchCount,
-                totalSearches: totalSearches,
-                isFirstSearch: false
-            };
-            localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
-            window.location.href = searchUrl;
-        }
+                        if (i < query.length) {
+                            searchBox.value += query[i];
+                            // 触发多种事件，确保必应识别输入
+                            searchBox.dispatchEvent(new Event('input', { bubbles: true }));
+                            searchBox.dispatchEvent(new Event('change', { bubbles: true }));
+                            searchBox.dispatchEvent(new Event('keydown', { 
+                                bubbles: true, 
+                                key: query[i] 
+                            }));
+                            i++;
+                        } else {
+                            clearInterval(typeInterval);
+                            // 输入完成后聚焦并等待
+                            searchBox.focus();
+                            
+                            // 提交搜索（多重保障机制）
+                            setTimeout(() => {
+                                if (!isRunning || isPaused) return;
+                                
+                                // 保存当前状态
+                                const currentState = {
+                                    isRunning: isRunning,
+                                    currentSearchCount: currentSearchCount,
+                                    totalSearches: totalSearches,
+                                    isFirstSearch: false
+                                };
+                                localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
+                                
+                                // 方法1：模拟Enter键（主要方法）
+                                const enterEvent = new KeyboardEvent('keypress', {
+                                    key: 'Enter',
+                                    code: 'Enter',
+                                    keyCode: 13,
+                                    which: 13,
+                                    bubbles: true
+                                });
+                                searchBox.dispatchEvent(enterEvent);
+                                
+                                // 方法2：点击搜索按钮（备用方法，1秒后执行以防方法1失败）
+                                setTimeout(() => {
+                                    if (document.getElementById('sb_form_q') && 
+                                        document.getElementById('sb_form_q').value === query) {
+                                        console.log("Enter键提交失败，尝试点击搜索按钮");
+                                        const searchButton = document.getElementById('sb_form_go') || 
+                                                          document.querySelector('input[type="submit"]') ||
+                                                          document.querySelector('.search-icon');
+                                        
+                                        if (searchButton) {
+                                            searchButton.click();
+                                        } else {
+                                            // 方法3：直接跳转URL（终极保障）
+                                            console.log("搜索按钮未找到，直接跳转URL");
+                                            window.location.href = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
+                                        }
+                                    }
+                                }, 1000);
+                                
+                                // 确保搜索循环继续
+                                setTimeout(performSearchCycle, 1500);
+                            }, Math.floor(Math.random() * 1500) + 500);
+                        }
+                    }, Math.floor(Math.random() * 150) + 50);
+                }, 500);
+            } else if (searchBoxAttempts >= maxAttempts) {
+                // 多次尝试失败后直接通过URL搜索
+                clearInterval(searchBoxInterval);
+                console.log("无法找到搜索框，将使用URL直接搜索");
+                const searchUrl = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
+                
+                // 保存状态后跳转
+                const currentState = {
+                    isRunning: isRunning,
+                    currentSearchCount: currentSearchCount,
+                    totalSearches: totalSearches,
+                    isFirstSearch: false
+                };
+                localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
+                
+                window.location.href = searchUrl;
+                setTimeout(performSearchCycle, 2000);
+            }
+        }, 500); // 每500ms尝试一次
     }
 
-    // 搜索循环（核心修复）
+    // 搜索循环
     async function performSearchCycle() {
-        // 修复：从存储恢复状态（如果页面刷新）
+        // 从存储恢复状态
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
             const { isRunning: savedRunning, currentSearchCount: savedCount, totalSearches: savedTotal } = JSON.parse(savedState);
@@ -532,7 +582,7 @@
 
         // 倒计时显示
         let remaining = delaySeconds;
-        if (countdownInterval) clearInterval(countdownInterval); // 防止多个定时器
+        if (countdownInterval) clearInterval(countdownInterval);
         countdownInterval = setInterval(() => {
             if (!isRunning || isPaused) {
                 clearInterval(countdownInterval);
@@ -584,7 +634,7 @@
         
         isRunning = true;
         isPaused = false;
-        isFirstSearch = true; // 重置首次搜索标记
+        isFirstSearch = true;
         
         // 更新按钮状态
         document.getElementById('startSearchBtn').disabled = true;
@@ -718,7 +768,7 @@
             }
         }
         
-        // 恢复运行状态（如果之前在运行中）
+        // 恢复运行状态
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
             const { isRunning: savedRunning, currentSearchCount: savedCount, totalSearches: savedTotal } = JSON.parse(savedState);
@@ -739,7 +789,6 @@
                 
                 // 继续搜索循环
                 setTimeout(() => {
-                    // 重新获取热词（防止过期）
                     deviceType = detectDeviceType();
                     if (deviceType === 'pc') {
                         getPcHotWords().then(words => {
