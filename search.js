@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         国内必应自动搜索（带浏览滑动）
+// @name         国内必应自动搜索（热榜修复版）
 // @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  自动搜索并在搜索后模拟用户滑动浏览页面
+// @version      1.2
+// @description  修复热榜获取卡住问题，增加超时和重试机制
 // @author       Your Name
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -40,9 +40,7 @@
         panel.style.width = '280px';
         panel.id = 'autoSearchControlPanel';
 
-        // 标题、状态显示、进度显示和按钮的代码保持不变
-        // （省略部分重复代码，完整代码见之前版本）
-        
+        // 标题
         const title = document.createElement('h3');
         title.textContent = '必应自动搜索控制';
         title.style.margin = '0 0 15px 0';
@@ -51,6 +49,7 @@
         title.style.color = '#333';
         panel.appendChild(title);
 
+        // 状态显示
         const statusDiv = document.createElement('div');
         statusDiv.id = 'autoSearchStatus';
         statusDiv.style.margin = '0 0 15px 0';
@@ -64,6 +63,7 @@
         statusDiv.textContent = '未运行';
         panel.appendChild(statusDiv);
 
+        // 进度显示
         const progressDiv = document.createElement('div');
         progressDiv.id = 'autoSearchProgress';
         progressDiv.style.margin = '0 0 15px 0';
@@ -73,11 +73,13 @@
         progressDiv.textContent = '进度: 0/0';
         panel.appendChild(progressDiv);
 
+        // 按钮容器
         const buttonsDiv = document.createElement('div');
         buttonsDiv.style.display = 'flex';
         buttonsDiv.style.gap = '10px';
         buttonsDiv.style.justifyContent = 'center';
 
+        // 开始按钮
         const startBtn = document.createElement('button');
         startBtn.id = 'startSearchBtn';
         startBtn.textContent = '开始搜索';
@@ -92,6 +94,7 @@
         startBtn.addEventListener('click', startSearch);
         buttonsDiv.appendChild(startBtn);
 
+        // 暂停按钮
         const pauseBtn = document.createElement('button');
         pauseBtn.id = 'pauseSearchBtn';
         pauseBtn.textContent = '暂停';
@@ -107,6 +110,7 @@
         pauseBtn.addEventListener('click', togglePause);
         buttonsDiv.appendChild(pauseBtn);
 
+        // 结束按钮
         const stopBtn = document.createElement('button');
         stopBtn.id = 'stopSearchBtn';
         stopBtn.textContent = '结束';
@@ -131,7 +135,7 @@
         const statusDiv = document.getElementById('autoSearchStatus');
         statusDiv.textContent = text;
         
-        // 根据状态设置不同颜色（保持不变）
+        // 根据状态设置不同颜色
         if (text.includes('运行中') || text.includes('搜索中') || text.includes('等待')) {
             statusDiv.style.backgroundColor = '#e8f5e9';
             statusDiv.style.color = '#2e7d32';
@@ -150,7 +154,7 @@
         }
     }
 
-    // 更新进度显示（保持不变）
+    // 更新进度显示
     function updateProgress(current, total) {
         document.getElementById('autoSearchProgress').textContent = `进度: ${current}/${total}`;
         localStorage.setItem('bingAutoSearchProgress', JSON.stringify({
@@ -160,17 +164,185 @@
         }));
     }
 
-    // 检测设备类型（保持不变）
+    // 检测设备类型
     function detectDeviceType() {
         const userAgent = navigator.userAgent;
         const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
         return mobileRegex.test(userAgent) ? 'mobile' : 'pc';
     }
 
-    // 热词处理、获取热词等函数保持不变
-    // （省略部分重复代码）
+    // 热词智能精简处理
+    function optimizeHotWord(word) {
+        let optimized = word.trim().replace(/^[【】()（）[]]+|[【】()（）[]]+$/g, '');
+        
+        const separators = /[，,。.？?！!：:;；—-]/;
+        if (separators.test(optimized)) {
+            const parts = optimized.split(separators);
+            optimized = parts[0].trim();
+        }
+        
+        const maxLength = deviceType === 'pc' ? 12 : 10;
+        const minLength = deviceType === 'pc' ? 3 : 2;
+        
+        if (optimized.length > maxLength) {
+            const cutPoints = [
+                optimized.lastIndexOf(' ', maxLength),
+                optimized.lastIndexOf('，', maxLength),
+                optimized.lastIndexOf('的', maxLength)
+            ].filter(pos => pos > minLength);
+            
+            const cutPos = cutPoints.length > 0 ? Math.max(...cutPoints) : maxLength;
+            optimized = optimized.substring(0, cutPos).trim();
+        }
+        
+        if (optimized.length < minLength) {
+            optimized = word.trim().substring(0, maxLength).trim();
+        }
+        
+        return optimized;
+    }
 
-    // 增强的模拟浏览滑动行为 - 重点改进
+    // 带超时和重试的HTTP请求
+    function requestWithTimeout(url, timeout = 8000) {
+        return new Promise((resolve, reject) => {
+            // 设置超时
+            const timer = setTimeout(() => {
+                reject(new Error(`请求超时 (${timeout}ms)`));
+            }, timeout);
+            
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: url,
+                onload: function(response) {
+                    clearTimeout(timer);
+                    if (response.status >= 200 && response.status < 300) {
+                        resolve(response);
+                    } else {
+                        reject(new Error(`HTTP错误: ${response.status}`));
+                    }
+                },
+                onerror: function(error) {
+                    clearTimeout(timer);
+                    reject(error);
+                }
+            });
+        });
+    }
+
+    // 带重试机制的函数
+    async function retryOperation(operation, maxRetries = 3, delayMs = 1000) {
+        let lastError;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                return await operation();
+            } catch (error) {
+                lastError = error;
+                console.log(`尝试 ${i + 1} 失败，${i < maxRetries - 1 ? '将重试' : '已达最大重试次数'}`);
+                if (i < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
+                }
+            }
+        }
+        throw lastError;
+    }
+
+    // 从百度热榜获取PC端热词（带重试和超时）
+    function getPcHotWords() {
+        return retryOperation(async () => {
+            const hotListUrl = 'https://top.baidu.com/board?tab=realtime';
+            
+            try {
+                const response = await requestWithTimeout(hotListUrl);
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(response.responseText, 'text/html');
+                const hotWordElements = doc.querySelectorAll('.c-single-text-ellipsis');
+                
+                let hotWords = Array.from(hotWordElements)
+                    .map(el => el.textContent.trim())
+                    .filter(word => word.length > 0)
+                    .map(word => optimizeHotWord(word))
+                    .filter(word => word.length >= 3);
+                
+                if (hotWords.length < 10) {
+                    console.log(`百度热榜获取热词不足，使用备用词库`);
+                    return getFallbackPcWords();
+                }
+                
+                // 确保有足够的热词
+                while (hotWords.length < 40) {
+                    hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
+                }
+                
+                return hotWords.slice(0, 40);
+            } catch (e) {
+                console.error('获取百度热榜失败:', e);
+                return getFallbackPcWords();
+            }
+        });
+    }
+
+    // 从今日头条获取移动端热词（带重试和超时）
+    function getMobileHotWords() {
+        return retryOperation(async () => {
+            const hotListUrl = 'https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc';
+            
+            try {
+                const response = await requestWithTimeout(hotListUrl);
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(response.responseText, 'text/html');
+                const hotWordElements = doc.querySelectorAll('.hot-event-item-title');
+                
+                let hotWords = Array.from(hotWordElements)
+                    .map(el => el.textContent.trim())
+                    .filter(word => word.length > 0)
+                    .map(word => optimizeHotWord(word))
+                    .filter(word => word.length >= 2);
+                
+                if (hotWords.length < 10) {
+                    console.log(`今日头条热榜获取热词不足，使用备用词库`);
+                    return getFallbackMobileWords();
+                }
+                
+                // 确保有足够的热词
+                while (hotWords.length < 30) {
+                    hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
+                }
+                
+                return hotWords.slice(0, 30);
+            } catch (e) {
+                console.error('获取今日头条热榜失败:', e);
+                return getFallbackMobileWords();
+            }
+        });
+    }
+
+    // 扩展的PC端备用热词库
+    function getFallbackPcWords() {
+        return [
+            "人工智能发展", "全球经济趋势", "量子计算突破", "新能源技术", "元宇宙应用",
+            "区块链创新", "5G技术进展", "太空探索", "自动驾驶", "大数据分析",
+            "云计算发展", "网络安全动态", "机器学习", "边缘计算", "数字货币",
+            "生物科技", "虚拟现实", "增强现实", "物联网", "智能家居",
+            "可再生能源", "气候变化影响", "健康饮食指南", "远程工作趋势", "数字货币监管",
+            "电动汽车发展", "航天技术突破", "人工智能伦理", "在线教育创新", "医疗技术进步",
+            "智能城市建设", "区块链应用", "机器人技术", "无人机应用", "3D打印技术",
+            "生物识别技术", "纳米技术发展", "量子通信", "脑机接口", "太空旅游"
+        ];
+    }
+
+    // 扩展的移动端备用热词库
+    function getFallbackMobileWords() {
+        return [
+            "手机新品发布", "短视频热门挑战", "移动游戏排行榜", "手机摄影技巧", "流量套餐对比",
+            "手游攻略大全", "移动支付安全", "短视频制作教程", "手机性能评测", "充电宝选购指南",
+            "5G手机推荐", "手机续航测试", "拍照手机排行", "手游内测资格", "手机清理技巧",
+            "直播带货技巧", "手机维修指南", "手机膜选购", "云游戏体验", "手机散热方法",
+            "短视频剪辑软件", "手机云台推荐", "手游加速器", "手机数据恢复", "手机电池保养",
+            "移动流量节省", "手机支架推荐", "手机防水测试", "夜间拍摄技巧", "手机信号增强"
+        ];
+    }
+
+    // 模拟浏览滑动行为
     function simulateSearchResultsBrowsing() {
         return new Promise(resolve => {
             if (isPaused || !isRunning) {
@@ -200,7 +372,7 @@
                     return;
                 }
                 
-                // 计算滑动位置（页面高度的10%到90%之间）
+                // 计算滑动位置
                 const maxScroll = Math.max(
                     document.body.scrollHeight,
                     document.body.offsetHeight,
@@ -209,20 +381,16 @@
                     document.documentElement.offsetHeight
                 );
                 
-                // 模拟人类阅读的滑动模式：先快后慢，偶尔回滚
+                // 模拟人类阅读的滑动模式
                 let scrollPosition;
                 if (step === 0) {
-                    // 第一步：快速浏览到页面20%-30%处
                     scrollPosition = maxScroll * (0.2 + Math.random() * 0.1);
                 } else if (step === scrollSteps - 1) {
-                    // 最后一步：回到页面顶部
                     scrollPosition = 0;
                 } else if (Math.random() < 0.2) {
-                    // 10%概率回滚一点
                     const currentPos = window.scrollY;
                     scrollPosition = Math.max(0, currentPos - maxScroll * (0.05 + Math.random() * 0.1));
                 } else {
-                    // 正常向下滚动
                     const currentPos = window.scrollY;
                     scrollPosition = Math.min(
                         maxScroll * 0.9,
@@ -236,39 +404,12 @@
                     behavior: 'smooth'
                 });
                 
-                // 随机点击一个搜索结果（20%概率）
-                if (Math.random() < 0.2 && step > 0) {
-                    const results = document.querySelectorAll('.b_algo h2 a');
-                    if (results.length > 0) {
-                        const randomResult = results[Math.floor(Math.random() * results.length)];
-                        // 先移动鼠标到元素位置
-                        const rect = randomResult.getBoundingClientRect();
-                        const mouseEvent = new MouseEvent('mousemove', {
-                            clientX: rect.left + rect.width / 2,
-                            clientY: rect.top + rect.height / 2,
-                            bubbles: true
-                        });
-                        randomResult.dispatchEvent(mouseEvent);
-                        
-                        // 短暂延迟后模拟点击
-                        setTimeout(() => {
-                            if (!isPaused && isRunning) {
-                                randomResult.click();
-                                // 打开后停留2-4秒再返回
-                                setTimeout(() => {
-                                    window.history.back();
-                                }, Math.floor(Math.random() * 2000) + 2000);
-                            }
-                        }, Math.floor(Math.random() * 800) + 200);
-                    }
-                }
-                
                 step++;
             }, intervalBetweenSteps);
         });
     }
 
-    // 执行搜索（添加搜索后浏览行为）
+    // 执行搜索
     function performSearch(query) {
         if (isPaused || !isRunning) return;
         
@@ -327,7 +468,7 @@
                                 };
                                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
                                 
-                                // 提交搜索（多重保障机制）
+                                // 提交搜索
                                 const enterEvent = new KeyboardEvent('keypress', {
                                     key: 'Enter',
                                     code: 'Enter',
@@ -337,14 +478,11 @@
                                 });
                                 searchBox.dispatchEvent(enterEvent);
                                 
-                                // 搜索提交后，等待结果加载并执行浏览行为
+                                // 搜索后处理
                                 setTimeout(() => {
-                                    // 等待搜索结果加载（1-3秒）
                                     const resultsLoadDelay = Math.floor(Math.random() * 2000) + 1000;
                                     setTimeout(() => {
-                                        // 执行搜索结果浏览
                                         simulateSearchResultsBrowsing().then(() => {
-                                            // 浏览完成后继续下一次搜索循环
                                             performSearchCycle();
                                         });
                                     }, resultsLoadDelay);
@@ -368,7 +506,6 @@
                 
                 window.location.href = searchUrl;
                 
-                // URL跳转后，等待页面加载并执行浏览
                 setTimeout(() => {
                     simulateSearchResultsBrowsing().then(() => {
                         performSearchCycle();
@@ -378,7 +515,7 @@
         }, 500);
     }
 
-    // 搜索循环（保持不变）
+    // 搜索循环
     async function performSearchCycle() {
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
@@ -438,10 +575,8 @@
         performSearch(randomWord);
     }
 
-    // 开始搜索、暂停/继续、停止搜索等函数保持不变
-    // （省略部分重复代码）
-    
-    function startSearch() {
+    // 开始搜索
+    async function startSearch() {
         if (isRunning) return;
         
         isRunning = true;
@@ -460,17 +595,25 @@
         totalSearches = deviceType === 'pc' ? 40 : 30;
         sessionTotalSearches = totalSearches;
         
-        updateStatus("获取热榜中...");
-        if (deviceType === 'pc') {
-            getPcHotWords().then(words => {
-                hotWords = words;
-                initSearch();
-            });
-        } else {
-            getMobileHotWords().then(words => {
-                hotWords = words;
-                initSearch();
-            });
+        try {
+            updateStatus("获取热榜中...");
+            // 增加热榜获取超时控制（15秒）
+            const hotWordsPromise = deviceType === 'pc' ? getPcHotWords() : getMobileHotWords();
+            
+            // 15秒超时控制
+            hotWords = await Promise.race([
+                hotWordsPromise,
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("热榜获取超时")), 15000)
+                )
+            ]);
+            
+            initSearch();
+        } catch (error) {
+            console.error("热榜获取失败，使用备用词库:", error);
+            // 直接使用备用词库，避免卡住
+            hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileWords();
+            initSearch();
         }
         
         function initSearch() {
@@ -550,6 +693,5 @@
         if (!document.getElementById('autoSearchControlPanel')) {
             createControlPanel();
         }
-        // 恢复状态代码保持不变
     });
 })();
