@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.5
+// @version      v2.5.6
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
@@ -11,7 +11,7 @@
 // @connect      rebang.today
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // 全局状态变量
@@ -164,7 +164,7 @@
         document.body.appendChild(panel);
 
         // 确保面板可见
-        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
 
     // 更新状态显示
@@ -334,7 +334,8 @@
                         hotWords = hotWords.slice(0, 40);
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+            }
         }
         return hotWords;
     }
@@ -363,7 +364,8 @@
                         hotWords = hotWords.slice(0, 30);
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+            }
         }
         return hotWords;
     }
@@ -447,11 +449,11 @@
             if (searchBox) {
                 clearInterval(searchBoxInterval);
                 updateStatus(`搜索中: ${query}`);
-                searchBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                searchBox.scrollIntoView({behavior: 'smooth', block: 'center'});
                 setTimeout(() => {
                     searchBox.value = '';
-                    searchBox.dispatchEvent(new Event('input', { bubbles: true }));
-                    searchBox.dispatchEvent(new Event('change', { bubbles: true }));
+                    searchBox.dispatchEvent(new Event('input', {bubbles: true}));
+                    searchBox.dispatchEvent(new Event('change', {bubbles: true}));
                     let i = 0;
                     const typeInterval = setInterval(() => {
                         if (!isRunning || isPaused) {
@@ -460,8 +462,8 @@
                         }
                         if (i < query.length) {
                             searchBox.value += query[i];
-                            searchBox.dispatchEvent(new Event('input', { bubbles: true }));
-                            searchBox.dispatchEvent(new Event('change', { bubbles: true }));
+                            searchBox.dispatchEvent(new Event('input', {bubbles: true}));
+                            searchBox.dispatchEvent(new Event('change', {bubbles: true}));
                             searchBox.dispatchEvent(new Event('keydown', {
                                 bubbles: true,
                                 key: query[i]
@@ -570,7 +572,11 @@
     function performSearchCycle() {
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
-            const { isRunning: savedRunning, currentSearchCount: savedCount, totalSearches: savedTotal } = JSON.parse(savedState);
+            const {
+                isRunning: savedRunning,
+                currentSearchCount: savedCount,
+                totalSearches: savedTotal
+            } = JSON.parse(savedState);
             if (savedRunning && !isRunning) {
                 isRunning = true;
                 currentSearchCount = savedCount;
@@ -597,47 +603,41 @@
         console.log(`第${currentSearchCount + 1}次搜索将在${delaySeconds}秒后进行`);
         updateStatus(`运行中 - 下次搜索: ${delaySeconds}秒`);
 
+        // 倒计时显示
         let remaining = delaySeconds;
         if (countdownInterval) clearInterval(countdownInterval);
-
-        let lastCountdownUpdate = Date.now();
         countdownInterval = setInterval(() => {
-            if (Date.now() - lastCountdownUpdate > 5000) {
-                console.log("倒计时卡住，重置倒计时");
-                clearInterval(countdownInterval);
-                performSearchCycle();
-                return;
-            }
-
             if (!isRunning || isPaused) {
                 clearInterval(countdownInterval);
                 return;
             }
 
             updateStatus(`运行中 - 下次搜索: ${remaining}秒`);
-            lastCountdownUpdate = Date.now();
             remaining--;
-
-            if (remaining < 0) {
-                clearInterval(countdownInterval);
-                setTimeout(() => {
-                    if (isRunning && !isPaused) {
-                        executeNextSearchStep();
-                    }
-                }, 100);
-            }
+            if (remaining < 0) clearInterval(countdownInterval);
         }, 1000);
 
-        // 去除await，改为setTimeout实现同步等待
-        setTimeout(() => {
-            if (isPaused || !isRunning) return;
-            setTimeout(() => {
-                if (isPaused || !isRunning) return;
-                executeNextSearchStep();
-            }, Math.floor(delaySeconds * 1000 * 0.4));
-        }, Math.floor(delaySeconds * 1000 * 0.6));
+        // 等待期间模拟行为
+        await new Promise(resolve => {
+            if (isPaused || !isRunning) {
+                resolve();
+                return;
+            }
+            setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.6));
+        });
 
         if (isPaused || !isRunning) return;
+
+        await simulateSearchResultsBrowsing();
+        if (isPaused || !isRunning) return;
+
+        await new Promise(resolve => {
+            if (isPaused || !isRunning) {
+                resolve();
+                return;
+            }
+            setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.4));
+        });
 
         executeNextSearchStep();
     }
@@ -700,7 +700,7 @@
 
             // 跳转到必应首页
             window.location.href = 'https://cn.bing.com/';
-            
+
             // 等待5秒以确保页面跳转完成
             setTimeout(() => {
                 console.log("等待5秒后继续执行");
@@ -743,7 +743,7 @@
 
             const savedProgress = localStorage.getItem('bingAutoSearchProgress');
             if (savedProgress) {
-                const { current, total } = JSON.parse(savedProgress);
+                const {current, total} = JSON.parse(savedProgress);
                 if (total === totalSearches) {
                     currentSearchCount = current;
                 } else {
@@ -844,7 +844,7 @@
     function restoreStateOnLoad() {
         const savedProgress = localStorage.getItem('bingAutoSearchProgress');
         if (savedProgress) {
-            const { current, total } = JSON.parse(savedProgress);
+            const {current, total} = JSON.parse(savedProgress);
             if (document.getElementById('autoSearchProgress')) {
                 document.getElementById('autoSearchProgress').textContent = `进度: ${current}/${total}`;
             }
@@ -1001,7 +1001,7 @@
             const scrollTimeout = setTimeout(() => {
                 console.log("结果浏览滑动超时");
                 clearInterval(scrollInterval);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
+                window.scrollTo({top: 0, behavior: 'smooth'});
                 setTimeout(resolve, 800);
             }, 15000);
 
@@ -1009,7 +1009,7 @@
                 if (isPaused || !isRunning || step >= scrollSteps) {
                     clearInterval(scrollInterval);
                     clearTimeout(scrollTimeout);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo({top: 0, behavior: 'smooth'});
                     setTimeout(resolve, 800);
                     return;
                 }
@@ -1052,7 +1052,7 @@
                     }
                 }
 
-                window.scrollTo({ top: scrollPosition, behavior: 'smooth' });
+                window.scrollTo({top: scrollPosition, behavior: 'smooth'});
                 step++;
             }, intervalBetweenSteps);
         });
@@ -1070,7 +1070,7 @@
             const panel = document.getElementById('autoSearchControlPanel');
             if (panel) {
                 panel.style.display = 'block';
-                panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                panel.scrollIntoView({behavior: 'smooth', block: 'center'});
             }
         }, 's');
 
