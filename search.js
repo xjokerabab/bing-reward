@@ -164,7 +164,7 @@
 
         panel.appendChild(buttonsDiv);
         document.body.appendChild(panel);
-        
+
         // 确保面板可见
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -670,7 +670,7 @@
                                     isFirstSearch: false
                                 };
                                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
-                                
+
                                 if (detectDeviceType() === 'mobile') {
                                     const form = document.getElementById('sb_form');
                                     if (form) {
@@ -691,14 +691,20 @@
                                         });
                                     }, 2000);
                                 } else {
-                                    const enterEvent = new KeyboardEvent('keypress', {
-                                        key: 'Enter',
-                                        code: 'Enter',
-                                        keyCode: 13,
-                                        which: 13,
-                                        bubbles: true
-                                    });
-                                    searchBox.dispatchEvent(enterEvent);
+                                    // PC端优先点击搜索按钮
+                                    const searchBtn = document.getElementById('sb_form_go');
+                                    if (searchBtn) {
+                                        searchBtn.click();
+                                    } else {
+                                        const enterEvent = new KeyboardEvent('keydown', {
+                                            key: 'Enter',
+                                            code: 'Enter',
+                                            keyCode: 13,
+                                            which: 13,
+                                            bubbles: true
+                                        });
+                                        searchBox.dispatchEvent(enterEvent);
+                                    }
                                     setTimeout(performSearchCycle, 1500);
                                 }
                             }, Math.floor(Math.random() * 1500) + 500);
@@ -716,7 +722,7 @@
                 };
                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
                 window.location.href = searchUrl;
-                
+
                 if (detectDeviceType() === 'mobile') {
                     setTimeout(() => {
                         simulateSearchResultsBrowsing().then(() => {
@@ -995,7 +1001,7 @@
 
         updateStatus("已停止");
         updateProgress(currentSearchCount, sessionTotalSearches || 0);
-        
+
         // 关闭控制面板
         const panel = document.getElementById('autoSearchControlPanel');
         if (panel) {
@@ -1024,7 +1030,7 @@
 
                 // 确保控制面板存在
                 createControlPanel();
-                
+
                 const startBtn = document.getElementById('startSearchBtn');
                 const pauseBtn = document.getElementById('pauseSearchBtn');
                 const stopBtn = document.getElementById('stopSearchBtn');
@@ -1143,7 +1149,7 @@
                 panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }, 's');
-        
+
         GM_registerMenuCommand('关闭面板', function () {
             closeControlPanelAndScript();
         }, 'c');
