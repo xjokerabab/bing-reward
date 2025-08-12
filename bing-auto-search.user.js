@@ -1,16 +1,14 @@
 // ==UserScript==
-// @name         国内必应自动搜索（修复手机版）
+// @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      v2.5.1
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
-// @author       Your Name
+// @author       Joker
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
-// @connect      top.baidu.com
 // @connect      rebang.today
-// @connect      ranks.hao.360.com
 // ==/UserScript==
 
 (function() {
@@ -29,8 +27,8 @@
     let hotWordFetchTimeout = null;
     let scrollInterval = null;
 
-    // 增加脚本关闭标志
-    let scriptStopped = false;
+    // 增加脚本关闭标志，默认关闭
+    let scriptStopped = true;
 
     // 创建控制面板 - 优化手机端显示位置和大小
     function createControlPanel() {
@@ -250,142 +248,166 @@
         return optimized;
     }
 
-    // 从百度热榜获取PC端热词（新版接口）
-    function getPcHotWords() {
-        return new Promise((resolve, reject) => {
-            const hotListUrl = 'https://api.rebang.today/v1/items?tab=baidu&sub_tab=realtime&page=1&version=1';
-
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: hotListUrl,
-                timeout: 10000, // 10���超时
-                onload: function(response) {
-                    try {
-                        const result = JSON.parse(response.responseText);
-                        if (result.code !== 200 || !result.data || !result.data.list) {
-                            console.error('百度热榜API返回异常:', result);
-                            return resolve(getFallbackPcWords());
+    // 从百度热榜获取PC端热词（同步）
+    function getPcHotWordsSync() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=baidu&sub_tab=realtime&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.word && item.word.trim().length > 0)
+                        .map(item => optimizeHotWord(item.word))
+                        .filter(word => word.length >= 3);
+                    if (hotWords.length < 40) {
+                        while (hotWords.length < 40) {
+                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
                         }
-                        let items;
-                        try {
-                            items = JSON.parse(result.data.list);
-                        } catch (e) {
-                            console.error('解析百度热榜list数据失败:', e);
-                            return resolve(getFallbackPcWords());
-                        }
-                        let hotWords = items
-                            .filter(item => item && item.word && item.word.trim().length > 0)
-                            .map(item => optimizeHotWord(item.word))
-                            .filter(word => word.length >= 3);
-
-                        if (hotWords.length < 40) {
-                            console.log(`百度热榜仅获取到${hotWords.length}条有效热词，补充至40条`);
-                            while (hotWords.length < 40) {
-                                hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
-                            }
-                        } else {
-                            hotWords = hotWords.slice(0, 40);
-                        }
-
-                        resolve(hotWords);
-                    } catch (e) {
-                        console.error('解析百度热榜失败:', e);
-                        resolve(getFallbackPcWords());
+                    } else {
+                        hotWords = hotWords.slice(0, 40);
                     }
-                },
-                onerror: function(error) {
-                    console.error('获取百度热榜失败:', error);
-                    resolve(getFallbackPcWords());
-                },
-                ontimeout: function() {
-                    console.error('获取百度热榜超时');
-                    resolve(getFallbackPcWords());
                 }
-            });
-        });
+            } catch (e) {
+                hotWords = getFallbackPcWords();
+            }
+        } else {
+            hotWords = getFallbackPcWords();
+        }
+        return hotWords;
     }
 
-    // 从今日头条API获取移动端热词
-    function getMobileHotWords() {
-        return new Promise((resolve) => {
-            const hotListUrl = 'https://api.rebang.today/v1/items?tab=top&sub_tab=lasthour&page=1&version=1';
-
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: hotListUrl,
-                timeout: 10000, // 10秒超时
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                onload: function(response) {
-                    try {
-                        const result = JSON.parse(response.responseText);
-
-                        if (result.code !== 200 || !result.data || !result.data.list) {
-                            console.error('今日头条API返回异常:', result);
-                            return resolve(getFallbackMobileWords());
+    // 从今日头条API获取移动端热词（同步）
+    function getMobileHotWordsSync() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=top&sub_tab=lasthour&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.title && item.title.trim().length > 0)
+                        .map(item => optimizeHotWord(item.title))
+                        .filter(word => word.length >= 2);
+                    if (hotWords.length < 30) {
+                        while (hotWords.length < 30) {
+                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
                         }
-
-                        let items;
-                        try {
-                            items = JSON.parse(result.data.list);
-                        } catch (e) {
-                            console.error('解析今日头条list数据失败:', e);
-                            return resolve(getFallbackMobileWords());
-                        }
-
-                        let hotWords = items
-                            .filter(item => item && item.title && item.title.trim().length > 0)
-                            .map(item => optimizeHotWord(item.title))
-                            .filter(word => word.length >= 2);
-
-                        if (hotWords.length < 30) {
-                            console.log(`今日头条仅获取到${hotWords.length}条有效热词，补充至30条`);
-                            while (hotWords.length < 30) {
-                                hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
-                            }
-                        } else {
-                            hotWords = hotWords.slice(0, 30);
-                        }
-
-                        resolve(hotWords);
-                    } catch (e) {
-                        console.error('解析今日头条热榜失败:', e);
-                        resolve(getFallbackMobileWords());
+                    } else {
+                        hotWords = hotWords.slice(0, 30);
                     }
-                },
-                onerror: function(error) {
-                    console.error('获取今日头条热榜失败:', error);
-                    resolve(getFallbackMobileWords());
-                },
-                ontimeout: function() {
-                    console.error('获取今日头条热榜超时');
-                    resolve(getFallbackMobileWords());
                 }
-            });
-        });
+            } catch (e) {
+                hotWords = getFallbackMobileWords();
+            }
+        } else {
+            hotWords = getFallbackMobileWords();
+        }
+        return hotWords;
     }
 
-    // PC端备用热词
-    function getFallbackPcWords() {
-        return [
-            "人工智能发展", "全球经济趋势", "量子计算突破", "新能源技术", "元宇宙应用",
-            "区块链创新", "5G技术进展", "太空探索", "自动驾驶", "大数据分析",
-            "云计算发展", "网络安全动态", "机器学习", "边缘计算", "数字货币",
-            "生物科技", "虚拟现实", "增强现实", "物联网", "智能家居"
-        ];
+    // 微博热搜（同步）
+    function getWeiboHotWordsSync() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=top&sub_tab=lasthour&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.title && item.title.trim().length > 0)
+                        .map(item => optimizeHotWord(item.title))
+                        .filter(word => word.length >= 3);
+                    if (hotWords.length < 40) {
+                        while (hotWords.length < 40) {
+                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
+                        }
+                    } else {
+                        hotWords = hotWords.slice(0, 40);
+                    }
+                }
+            } catch (e) {}
+        }
+        return hotWords;
     }
 
-    // 移动端备用热词
-    function getFallbackMobileWords() {
-        return [
-            "手机新品", "短视频挑战", "移动游戏排行", "手机摄影", "流量套餐",
-            "手游攻略", "移动支付安全", "短视频制作", "手机评测", "充电宝选购",
-            "社交软件", "网络热点", "明星动态", "电影推荐", "美食做法",
-            "旅游攻略", "健康养生", "学习技巧", "职场经验", "亲子教育"
-        ];
+    // 36氪热搜（同步）
+    function get36krHotWordsSync() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=36kr&sub_tab=hotlist&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.title && item.title.trim().length > 0)
+                        .map(item => optimizeHotWord(item.title))
+                        .filter(word => word.length >= 2);
+                    if (hotWords.length < 30) {
+                        while (hotWords.length < 30) {
+                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
+                        }
+                    } else {
+                        hotWords = hotWords.slice(0, 30);
+                    }
+                }
+            } catch (e) {}
+        }
+        return hotWords;
     }
+
+    // 随机获取PC热词（同步）
+    function getRandomPcHotWordsSync() {
+        const sources = [getPcHotWordsSync, getWeiboHotWordsSync];
+        const idx = Math.random() < 0.5 ? 0 : 1;
+        let words = sources[idx]();
+        if (!words || words.length === 0) {
+            words = sources[1 - idx]();
+        }
+        return words.length > 0 ? words : getFallbackPcWords();
+    }
+
+    // 随机获取移动热词（同步）
+    function getRandomMobileHotWordsSync() {
+        const sources = [getMobileHotWordsSync, get36krHotWordsSync];
+        const idx = Math.random() < 0.5 ? 0 : 1;
+        let words = sources[idx]();
+        if (!words || words.length === 0) {
+            words = sources[1 - idx]();
+        }
+        return words.length > 0 ? words : getFallbackMobileWords();
+    }
+
+    // 全局备用热词
+    let fallbackPcWords = [
+        "人工智能发展", "全球经济趋势", "量子计算突破", "新能源技术", "元宇宙应用",
+        "区块链创新", "5G技术进展", "太空探索", "自动驾驶", "大数据分析",
+        "云计算发展", "网络安全动态", "机器学习", "边缘计算", "数字货币",
+        "生物科技", "虚拟现实", "增强现实", "物联网", "智能家居"
+    ];
+
+    let fallbackMobileWords = [
+        "手机新品", "短视频挑战", "移动游戏排行", "手机摄影", "流量套餐",
+        "手游攻略", "移动支付安全", "短视频制作", "手机评测", "充电宝选购",
+        "社交软件", "网络热点", "明星动态", "电影推荐", "美食做法",
+        "旅游攻略", "健康养生", "学习技巧", "职场经验", "亲子教育"
+    ];
 
     // 随机生成延迟时间
     function getRandomDelay() {
@@ -410,167 +432,6 @@
         }
 
         return item;
-    }
-
-    // 微博热搜接口
-    function getWeiboHotWords() {
-        return new Promise((resolve) => {
-            const hotListUrl = 'https://api.rebang.today/v1/items?tab=top&sub_tab=lasthour&page=1&version=1';
-
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: hotListUrl,
-                timeout: 10000,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                onload: function(response) {
-                    try {
-                        const result = JSON.parse(response.responseText);
-
-                        if (result.code !== 200 || !result.data || !result.data.list) {
-                            console.error('微博API返回异常:', result);
-                            return resolve([]);
-                        }
-
-                        let items;
-                        try {
-                            items = JSON.parse(result.data.list);
-                        } catch (e) {
-                            console.error('解析微博list数据失败:', e);
-                            return resolve([]);
-                        }
-
-                        let hotWords = items
-                            .filter(item => item && item.title && item.title.trim().length > 0)
-                            .map(item => optimizeHotWord(item.title))
-                            .filter(word => word.length >= 3);
-
-                        if (hotWords.length < 40) {
-                            while (hotWords.length < 40) {
-                                hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
-                            }
-                        } else {
-                            hotWords = hotWords.slice(0, 40);
-                        }
-                        resolve(hotWords);
-                    } catch (e) {
-                        console.error('解析微博热榜失败:', e);
-                        resolve([]);
-                    }
-                },
-                onerror: function() {
-                    resolve([]);
-                },
-                ontimeout: function() {
-                    console.error('获取微博热榜超时');
-                    resolve([]);
-                }
-            });
-        });
-    }
-
-    // 36氪热搜接口
-    function get36krHotWords() {
-        return new Promise((resolve) => {
-            const hotListUrl = 'https://api.rebang.today/v1/items?tab=36kr&sub_tab=hotlist&page=1&version=1';
-
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: hotListUrl,
-                timeout: 10000,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                },
-                onload: function(response) {
-                    try {
-                        const result = JSON.parse(response.responseText);
-
-                        if (result.code !== 200 || !result.data || !result.data.list) {
-                            console.error('36氪API返回异常:', result);
-                            return resolve([]);
-                        }
-
-                        let items;
-                        try {
-                            items = JSON.parse(result.data.list);
-                        } catch (e) {
-                            console.error('解析36氪list数据失败:', e);
-                            return resolve([]);
-                        }
-
-                        let hotWords = items
-                            .filter(item => item && item.title && item.title.trim().length > 0)
-                            .map(item => optimizeHotWord(item.title))
-                            .filter(word => word.length >= 2);
-
-                        if (hotWords.length < 30) {
-                            while (hotWords.length < 30) {
-                                hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
-                            }
-                        } else {
-                            hotWords = hotWords.slice(0, 30);
-                        }
-                        resolve(hotWords);
-                    } catch (e) {
-                        console.error('解析36氪热榜失败:', e);
-                        resolve([]);
-                    }
-                },
-                onerror: function() {
-                    resolve([]);
-                },
-                ontimeout: function() {
-                    console.error('获取36氪热榜超时');
-                    resolve([]);
-                }
-            });
-        });
-    }
-
-    // 修改热词获取逻辑
-    async function getRandomPcHotWords() {
-        try {
-            const sources = [getPcHotWords, getWeiboHotWords];
-            const idx = Math.random() < 0.5 ? 0 : 1;
-            let words = await Promise.race([
-                sources[idx](),
-                new Promise(resolve => setTimeout(() => resolve([]), 12000))
-            ]);
-            if (!words || words.length === 0) {
-                words = await Promise.race([
-                    sources[1 - idx](),
-                    new Promise(resolve => setTimeout(() => resolve([]), 12000))
-                ]);
-            }
-            return words.length > 0 ? words : getFallbackPcWords();
-        } catch (e) {
-            console.error('获取PC热词出错:', e);
-            return getFallbackPcWords();
-        }
-    }
-
-    async function getRandomMobileHotWords() {
-        try {
-            const sources = [getMobileHotWords, get36krHotWords];
-            const idx = Math.random() < 0.5 ? 0 : 1;
-            let words = await Promise.race([
-                sources[idx](),
-                new Promise(resolve => setTimeout(() => resolve([]), 12000))
-            ]);
-            if (!words || words.length === 0) {
-                words = await Promise.race([
-                    sources[1 - idx](),
-                    new Promise(resolve => setTimeout(() => resolve([]), 12000))
-                ]);
-            }
-            return words.length > 0 ? words : getFallbackMobileWords();
-        } catch (e) {
-            console.error('获取移动热词出错:', e);
-            return getFallbackMobileWords();
-        }
     }
 
     // 执行搜索
@@ -879,30 +740,19 @@
             return;
         }
 
-        clearTimeout(hotWordFetchTimeout);
-        hotWordFetchTimeout = setTimeout(() => {
-            if (isRunning && (hotWords === null || hotWords.length === 0)) {
-                console.error('热词获取超时，使用备用热词');
-                hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileWords();
-                initializeSearchProcess();
-            }
-        }, 20000);
-
+        // 不再使用异步热词获取
         try {
             if (deviceType === 'pc') {
                 totalSearches = 40;
-                hotWords = await getRandomPcHotWords();
+                hotWords = getRandomPcHotWordsSync();
             } else {
                 totalSearches = 30;
-                hotWords = await getRandomMobileHotWords();
+                hotWords = getRandomMobileHotWordsSync();
             }
-
-            clearTimeout(hotWordFetchTimeout);
             initializeSearchProcess();
         } catch (e) {
-            clearTimeout(hotWordFetchTimeout);
             updateStatus("热词获取失败，使用备用方案");
-            hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileWords();
+            hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileHotWords();
             initializeSearchProcess();
         }
 
@@ -1076,62 +926,36 @@
                 // 如果需要初始化（刚跳转到首页），直接执行初始化流程
                 if (needInit) {
                     deviceType = detectDeviceType();
-                    let hotWordTimeout;
-                    let hotWordResolved = false;
-                    // 增加超时兜底，避免网络慢导致误判
-                    hotWordTimeout = setTimeout(() => {
-                        if (!hotWordResolved) {
-                            hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileWords();
-                            initializeSearchProcess();
-                            // 清除 needInitialize 标记
-                            const state = JSON.parse(localStorage.getItem('bingAutoSearchState') || '{}');
-                            state.needInitialize = false;
-                            localStorage.setItem('bingAutoSearchState', JSON.stringify(state));
+                    try {
+                        if (deviceType === 'pc') {
+                            totalSearches = 40;
+                            hotWords = getRandomPcHotWordsSync();
+                        } else {
+                            totalSearches = 30;
+                            hotWords = getRandomMobileHotWordsSync();
                         }
-                    }, 15000);
-
-                    (async () => {
-                        try {
-                            if (deviceType === 'pc') {
-                                totalSearches = 40;
-                                hotWords = await getRandomPcHotWords();
-                            } else {
-                                totalSearches = 30;
-                                hotWords = await getRandomMobileHotWords();
-                            }
-                            hotWordResolved = true;
-                            clearTimeout(hotWordTimeout);
-                            initializeSearchProcess();
-                            // 初始化后将 needInitialize 标记为 false
-                            const state = JSON.parse(localStorage.getItem('bingAutoSearchState') || '{}');
-                            state.needInitialize = false;
-                            localStorage.setItem('bingAutoSearchState', JSON.stringify(state));
-                        } catch (e) {
-                            hotWordResolved = true;
-                            clearTimeout(hotWordTimeout);
-                            updateStatus("热词获取失败，使用备用方案");
-                            hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileHotWords();
-                            initializeSearchProcess();
-                            // 同样修复 needInitialize 标记
-                            const state = JSON.parse(localStorage.getItem('bingAutoSearchState') || '{}');
-                            state.needInitialize = false;
-                            localStorage.setItem('bingAutoSearchState', JSON.stringify(state));
-                        }
-                    })();
+                        initializeSearchProcess();
+                        // 初始化后将 needInitialize 标记为 false
+                        const state = JSON.parse(localStorage.getItem('bingAutoSearchState') || '{}');
+                        state.needInitialize = false;
+                        localStorage.setItem('bingAutoSearchState', JSON.stringify(state));
+                    } catch (e) {
+                        updateStatus("热词获取失败，使用备用方案");
+                        hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileHotWords();
+                        initializeSearchProcess();
+                        const state = JSON.parse(localStorage.getItem('bingAutoSearchState') || '{}');
+                        state.needInitialize = false;
+                        localStorage.setItem('bingAutoSearchState', JSON.stringify(state));
+                    }
                 } else {
                     setTimeout(() => {
                         deviceType = detectDeviceType();
                         if (deviceType === 'pc') {
-                            getPcHotWords().then(words => {
-                                hotWords = words;
-                                performSearchCycle();
-                            });
+                            hotWords = getRandomPcHotWordsSync();
                         } else {
-                            getMobileHotWords().then(words => {
-                                hotWords = words;
-                                performSearchCycle();
-                            });
+                            hotWords = getRandomMobileHotWordsSync();
                         }
+                        performSearchCycle();
                     }, 1000);
                 }
             }
@@ -1139,11 +963,10 @@
     }
 
     // 页面加载完成后初始化
-    window.addEventListener('load', async () => {
+    window.addEventListener('load', () => {
         if (scriptStopped) return;
         createControlPanel();
         restoreStateOnLoad();
-
         const savedState = localStorage.getItem('bingAutoSearchState');
         let needInit = false;
         let deviceTypeLocal = detectDeviceType();
@@ -1171,10 +994,10 @@
             try {
                 if (deviceType === 'pc') {
                     totalSearches = 40;
-                    hotWords = await getRandomPcHotWords();
+                    hotWords = getRandomPcHotWordsSync();
                 } else {
                     totalSearches = 30;
-                    hotWords = await getRandomMobileHotWords();
+                    hotWords = getRandomMobileHotWordsSync();
                 }
                 hotWordResolved = true;
                 clearTimeout(hotWordTimeout);
@@ -1276,7 +1099,7 @@
 
     // 添加菜单命令：修复手机端菜单点击不显示面板的问题
     if (typeof GM_registerMenuCommand === 'function') {
-        // 确保菜单命令能正确触发面板显示
+        // 确保菜单命令能���确触发面板显示
         GM_registerMenuCommand('显示控制面板', function () {
             // 强制创建并显示面板
             createControlPanel();
