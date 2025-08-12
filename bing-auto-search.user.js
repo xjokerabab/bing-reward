@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.7
-// @description  修复首次启动需切换到首页问题，确保搜索流程连贯
+// @version      v2.5.8
+// @description  确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -581,6 +581,9 @@
             return;
         }
 
+        await simulateSearchResultsBrowsing();
+        if (isPaused || !isRunning) return;
+
         const delaySeconds = getRandomDelay();
         console.log(`第${currentSearchCount + 1}次搜索将在${delaySeconds}秒后进行`);
         updateStatus(`运行中 - 下次搜索: ${delaySeconds}秒`);
@@ -598,29 +601,8 @@
             remaining--;
             if (remaining < 0) clearInterval(countdownInterval);
         }, 1000);
-
-        // 等待期间模拟行为
-        await new Promise(resolve => {
-            if (isPaused || !isRunning) {
-                resolve();
-                return;
-            }
-            setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.6));
-        });
-
+        await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
         if (isPaused || !isRunning) return;
-
-        await simulateSearchResultsBrowsing();
-        if (isPaused || !isRunning) return;
-
-        await new Promise(resolve => {
-            if (isPaused || !isRunning) {
-                resolve();
-                return;
-            }
-            setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.4));
-        });
-
         executeNextSearchStep();
     }
 
@@ -968,11 +950,11 @@
                 resolve();
                 return;
             }
-            // updateStatus("正在浏览搜索结果...");
+            updateStatus("正在浏览搜索结果...");
             const isMobile = detectDeviceType() === 'mobile';
             // 为PC端设置不同的滑动参数
             const scrollSteps = isMobile ? Math.floor(Math.random() * 4) + 4 : Math.floor(Math.random() * 6) + 4;
-            const totalBrowseTime = isMobile ? Math.floor(Math.random() * 6000) + 6000 : Math.floor(Math.random() * 8000) + 8000;
+            const totalBrowseTime = isMobile ? Math.floor(Math.random() * 4000) + 1000 : Math.floor(Math.random() * 5000) + 2000;
             const intervalBetweenSteps = totalBrowseTime / scrollSteps;
             let step = 0;
             let direction = 1;
