@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索（修复手机版）
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.0
 // @description  修复手机浏览器卡住问题和控制面板不显示问题，确保搜索流程连贯
 // @author       Your Name
 // @match        https://cn.bing.com/*
@@ -164,7 +164,7 @@
 
         panel.appendChild(buttonsDiv);
         document.body.appendChild(panel);
-
+        
         // 确保面板可见
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -670,7 +670,7 @@
                                     isFirstSearch: false
                                 };
                                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
-
+                                
                                 if (detectDeviceType() === 'mobile') {
                                     const form = document.getElementById('sb_form');
                                     if (form) {
@@ -691,20 +691,35 @@
                                         });
                                     }, 2000);
                                 } else {
-                                    // PC端优先点击搜索按钮
-                                    const searchBtn = document.getElementById('sb_form_go');
-                                    if (searchBtn) {
-                                        searchBtn.click();
-                                    } else {
-                                        const enterEvent = new KeyboardEvent('keydown', {
-                                            key: 'Enter',
-                                            code: 'Enter',
-                                            keyCode: 13,
-                                            which: 13,
-                                            bubbles: true
-                                        });
-                                        searchBox.dispatchEvent(enterEvent);
-                                    }
+                                    // 方法1：模拟Enter键（主要方法）
+                                    const enterEvent = new KeyboardEvent('keypress', {
+                                        key: 'Enter',
+                                        code: 'Enter',
+                                        keyCode: 13,
+                                        which: 13,
+                                        bubbles: true
+                                    });
+                                    searchBox.dispatchEvent(enterEvent);
+                                    
+                                    // 方法2：点击搜索按钮（备用方法，1秒后执行以防方法1失败）
+                                    setTimeout(() => {
+                                        if (document.getElementById('sb_form_q') && 
+                                            document.getElementById('sb_form_q').value === query) {
+                                            console.log("Enter键提交失败，尝试点击搜索按钮");
+                                            const searchButton = document.getElementById('sb_form_go') || 
+                                                              document.querySelector('input[type="submit"]') ||
+                                                              document.querySelector('.search-icon');
+                                            
+                                            if (searchButton) {
+                                                searchButton.click();
+                                            } else {
+                                                // 方法3：直接跳转URL（终极保障）
+                                                console.log("搜索按钮未找到，直接跳转URL");
+                                                window.location.href = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
+                                            }
+                                        }
+                                    }, 1000);
+
                                     setTimeout(performSearchCycle, 1500);
                                 }
                             }, Math.floor(Math.random() * 1500) + 500);
@@ -722,7 +737,7 @@
                 };
                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
                 window.location.href = searchUrl;
-
+                
                 if (detectDeviceType() === 'mobile') {
                     setTimeout(() => {
                         simulateSearchResultsBrowsing().then(() => {
@@ -1001,7 +1016,7 @@
 
         updateStatus("已停止");
         updateProgress(currentSearchCount, sessionTotalSearches || 0);
-
+        
         // 关闭控制面板
         const panel = document.getElementById('autoSearchControlPanel');
         if (panel) {
@@ -1030,7 +1045,7 @@
 
                 // 确保控制面板存在
                 createControlPanel();
-
+                
                 const startBtn = document.getElementById('startSearchBtn');
                 const pauseBtn = document.getElementById('pauseSearchBtn');
                 const stopBtn = document.getElementById('stopSearchBtn');
@@ -1149,7 +1164,7 @@
                 panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }, 's');
-
+        
         GM_registerMenuCommand('关闭面板', function () {
             closeControlPanelAndScript();
         }, 'c');
@@ -1170,3 +1185,4 @@
         updateStatus('已停止');
     }
 })();
+    
