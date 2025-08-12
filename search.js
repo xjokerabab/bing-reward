@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         国内必应自动搜索（热词精简版）
+// @name         国内必应自动搜索（优化版）
 // @namespace    http://tampermonkey.net/
-// @version      0.7
-// @description  适配cn.bing.com，自动精简热词长度，带手动控制功能，更贴近自然搜索习惯
+// @version      0.8
+// @description  修复进度问题，优化按钮显示，调整等待时间为5-30秒
 // @author       Your Name
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -22,6 +22,8 @@
     let totalSearches = 0;
     let hotWords = [];
     let deviceType = '';
+    // 存储当前搜索会话的总搜索数，解决页面刷新后进度问题
+    let sessionTotalSearches = 0;
 
     // 创建控制面板
     function createControlPanel() {
@@ -29,31 +31,35 @@
         panel.style.position = 'fixed';
         panel.style.top = '20px';
         panel.style.right = '20px';
-        panel.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+        panel.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
         panel.style.border = '1px solid #ccc';
         panel.style.borderRadius = '8px';
         panel.style.padding = '15px';
-        panel.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+        panel.style.boxShadow = '0 4px 15px rgba(0,0,0,0.15)';
         panel.style.zIndex = '999999';
-        panel.style.width = '250px';
+        panel.style.width = '280px';
         panel.id = 'autoSearchControlPanel';
 
         // 标题
         const title = document.createElement('h3');
         title.textContent = '必应自动搜索控制';
-        title.style.margin = '0 0 10px 0';
-        title.style.fontSize = '16px';
+        title.style.margin = '0 0 15px 0';
+        title.style.fontSize = '18px';
         title.style.textAlign = 'center';
+        title.style.color = '#333';
         panel.appendChild(title);
 
-        // 状态显示
+        // 状态显示（放大显示）
         const statusDiv = document.createElement('div');
         statusDiv.id = 'autoSearchStatus';
-        statusDiv.style.margin = '0 0 10px 0';
-        statusDiv.style.padding = '8px';
+        statusDiv.style.margin = '0 0 15px 0';
+        statusDiv.style.padding = '12px';
         statusDiv.style.backgroundColor = '#f5f5f5';
-        statusDiv.style.borderRadius = '4px';
+        statusDiv.style.borderRadius = '6px';
         statusDiv.style.textAlign = 'center';
+        statusDiv.style.fontSize = '16px';
+        statusDiv.style.fontWeight = 'bold';
+        statusDiv.style.color = '#555';
         statusDiv.textContent = '未运行';
         panel.appendChild(statusDiv);
 
@@ -62,53 +68,73 @@
         progressDiv.id = 'autoSearchProgress';
         progressDiv.style.margin = '0 0 15px 0';
         progressDiv.style.textAlign = 'center';
+        progressDiv.style.fontSize = '15px';
+        progressDiv.style.color = '#666';
         progressDiv.textContent = '进度: 0/0';
         panel.appendChild(progressDiv);
 
         // 按钮容器
         const buttonsDiv = document.createElement('div');
         buttonsDiv.style.display = 'flex';
-        buttonsDiv.style.gap = '8px';
+        buttonsDiv.style.gap = '10px';
         buttonsDiv.style.justifyContent = 'center';
 
-        // 开始按钮
+        // 开始按钮（增强视觉效果）
         const startBtn = document.createElement('button');
         startBtn.id = 'startSearchBtn';
-        startBtn.textContent = '开始';
-        startBtn.style.padding = '6px 12px';
+        startBtn.textContent = '开始搜索';
+        startBtn.style.padding = '8px 16px';
         startBtn.style.backgroundColor = '#4CAF50';
         startBtn.style.color = 'white';
         startBtn.style.border = 'none';
-        startBtn.style.borderRadius = '4px';
+        startBtn.style.borderRadius = '6px';
         startBtn.style.cursor = 'pointer';
+        startBtn.style.fontSize = '14px';
+        startBtn.style.fontWeight = 'bold';
+        startBtn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        startBtn.style.transition = 'all 0.2s ease';
+        startBtn.addEventListener('mouseover', () => startBtn.style.transform = 'translateY(-2px)');
+        startBtn.addEventListener('mouseout', () => startBtn.style.transform = 'translateY(0)');
         startBtn.addEventListener('click', startSearch);
         buttonsDiv.appendChild(startBtn);
 
-        // 暂停按钮
+        // 暂停按钮（增强视觉效果）
         const pauseBtn = document.createElement('button');
         pauseBtn.id = 'pauseSearchBtn';
         pauseBtn.textContent = '暂停';
-        pauseBtn.style.padding = '6px 12px';
+        pauseBtn.style.padding = '8px 16px';
         pauseBtn.style.backgroundColor = '#ff9800';
         pauseBtn.style.color = 'white';
         pauseBtn.style.border = 'none';
-        pauseBtn.style.borderRadius = '4px';
+        pauseBtn.style.borderRadius = '6px';
         pauseBtn.style.cursor = 'pointer';
+        pauseBtn.style.fontSize = '14px';
+        pauseBtn.style.fontWeight = 'bold';
+        pauseBtn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        pauseBtn.style.transition = 'all 0.2s ease';
         pauseBtn.disabled = true;
+        pauseBtn.addEventListener('mouseover', () => !pauseBtn.disabled && (pauseBtn.style.transform = 'translateY(-2px)'));
+        pauseBtn.addEventListener('mouseout', () => !pauseBtn.disabled && (pauseBtn.style.transform = 'translateY(0)'));
         pauseBtn.addEventListener('click', togglePause);
         buttonsDiv.appendChild(pauseBtn);
 
-        // 结束按钮
+        // 结束按钮（增强视觉效果）
         const stopBtn = document.createElement('button');
         stopBtn.id = 'stopSearchBtn';
         stopBtn.textContent = '结束';
-        stopBtn.style.padding = '6px 12px';
+        stopBtn.style.padding = '8px 16px';
         stopBtn.style.backgroundColor = '#f44336';
         stopBtn.style.color = 'white';
         stopBtn.style.border = 'none';
-        stopBtn.style.borderRadius = '4px';
+        stopBtn.style.borderRadius = '6px';
         stopBtn.style.cursor = 'pointer';
+        stopBtn.style.fontSize = '14px';
+        stopBtn.style.fontWeight = 'bold';
+        stopBtn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        stopBtn.style.transition = 'all 0.2s ease';
         stopBtn.disabled = true;
+        stopBtn.addEventListener('mouseover', () => !stopBtn.disabled && (stopBtn.style.transform = 'translateY(-2px)'));
+        stopBtn.addEventListener('mouseout', () => !stopBtn.disabled && (stopBtn.style.transform = 'translateY(0)'));
         stopBtn.addEventListener('click', stopSearch);
         buttonsDiv.appendChild(stopBtn);
 
@@ -116,14 +142,38 @@
         document.body.appendChild(panel);
     }
 
-    // 更新状态显示
+    // 更新状态显示（增加颜色标识）
     function updateStatus(text) {
-        document.getElementById('autoSearchStatus').textContent = text;
+        const statusDiv = document.getElementById('autoSearchStatus');
+        statusDiv.textContent = text;
+        
+        // 根据状态设置不同颜色
+        if (text.includes('运行中') || text.includes('搜索中') || text.includes('等待')) {
+            statusDiv.style.backgroundColor = '#e8f5e9';
+            statusDiv.style.color = '#2e7d32';
+        } else if (text.includes('已暂停')) {
+            statusDiv.style.backgroundColor = '#fff8e1';
+            statusDiv.style.color = '#ff8f00';
+        } else if (text.includes('已停止') || text.includes('未运行')) {
+            statusDiv.style.backgroundColor = '#ffebee';
+            statusDiv.style.color = '#c62828';
+        } else if (text.includes('完成')) {
+            statusDiv.style.backgroundColor = '#e3f2fd';
+            statusDiv.style.color = '#1565c0';
+        } else {
+            statusDiv.style.backgroundColor = '#f5f5f5';
+            statusDiv.style.color = '#555';
+        }
     }
 
     // 更新进度显示
     function updateProgress(current, total) {
         document.getElementById('autoSearchProgress').textContent = `进度: ${current}/${total}`;
+        // 保存到localStorage，解决页面刷新后进度丢失问题
+        localStorage.setItem('bingAutoSearchProgress', JSON.stringify({
+            current: current,
+            total: total
+        }));
     }
 
     // 检测设备类型
@@ -288,12 +338,10 @@
         ];
     }
 
-    // 随机生成延迟时间（5-30秒）
-    function getRandomDelay(min, max) {
-        if (Math.random() < 0.1) {
-            return Math.floor(Math.random() * (max * 2 - min * 1.5 + 1)) + Math.floor(min * 1.5);
-        }
-        return Math.floor(Math.random() * (max - min + 1)) + min;
+    // 随机生成延迟时间（5-30秒，已按要求调整）
+    function getRandomDelay() {
+        // 确保延迟在5-30秒之间
+        return Math.floor(Math.random() * 26) + 5;
     }
 
     // 随机选择热词
@@ -404,7 +452,7 @@
         
         const searchBox = document.getElementById('sb_form_q');
         if (searchBox) {
-            updateStatus(`搜索: ${query}`);
+            updateStatus(`搜索中: ${query}`);
             
             // 清空搜索框
             searchBox.value = '';
@@ -435,12 +483,18 @@
                             if (searchButton) searchButton.click();
                             else window.location.href = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
                         }
+                        
+                        // 提交后继续搜索循环
+                        setTimeout(performSearchCycle, 1000);
                     }, Math.floor(Math.random() * 1500) + 500);
                 }
             }, Math.floor(Math.random() * 150) + 50); // 打字速度变化（50-200ms/字符）
         } else {
+            // 如果找不到搜索框，直接跳转并设置回调
             const searchUrl = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
             window.location.href = searchUrl;
+            // 页面加载后继续搜索循环
+            setTimeout(performSearchCycle, 3000);
         }
     }
 
@@ -449,15 +503,15 @@
         if (!isRunning || isPaused) return;
         
         if (currentSearchCount >= totalSearches) {
-            updateStatus(`已完成${totalSearches}次搜索`);
+            updateStatus(`已完成所有${totalSearches}次搜索`);
             stopSearch();
             alert(`已完成所有${totalSearches}次搜索任务！`);
             return;
         }
 
-        const delaySeconds = getRandomDelay(5, 30);
+        const delaySeconds = getRandomDelay();
         console.log(`第${currentSearchCount + 1}次搜索将在${delaySeconds}秒后进行`);
-        updateStatus(`等待: ${delaySeconds}秒`);
+        updateStatus(`运行中 - 下次搜索: ${delaySeconds}秒`);
 
         // 倒计时显示
         let remaining = delaySeconds;
@@ -467,7 +521,7 @@
                 return;
             }
             
-            updateStatus(`等待: ${remaining}秒`);
+            updateStatus(`运行中 - 下次搜索: ${remaining}秒`);
             remaining--;
             if (remaining < 0) clearInterval(countdownInterval);
         }, 1000);
@@ -519,28 +573,50 @@
         document.getElementById('pauseSearchBtn').disabled = false;
         document.getElementById('stopSearchBtn').disabled = false;
         
+        // 高亮显示运行状态
+        document.getElementById('pauseSearchBtn').style.transform = 'scale(1.05)';
+        document.getElementById('pauseSearchBtn').style.boxShadow = '0 3px 8px rgba(255, 152, 0, 0.3)';
+        
         updateStatus("准备中...");
         
         // 检测设备类型
         deviceType = detectDeviceType();
         console.log(`设备类型: ${deviceType}`);
         
-        // 获取热词
+        // 设置参数
         if (deviceType === 'pc') {
             totalSearches = 40;
-            updateStatus("获取百度热榜...");
-            hotWords = await getPcHotWords();
         } else {
             totalSearches = 30;
-            updateStatus("获取今日头条热榜...");
+        }
+        sessionTotalSearches = totalSearches;
+        
+        // 获取热词
+        updateStatus("获取热榜中...");
+        if (deviceType === 'pc') {
+            hotWords = await getPcHotWords();
+        } else {
             hotWords = await getMobileHotWords();
         }
         
-        // 恢复进度
-        currentSearchCount = parseInt(localStorage.getItem('bingAutoSearchCount') || '0');
+        // 恢复进度（从localStorage读取）
+        const savedProgress = localStorage.getItem('bingAutoSearchProgress');
+        if (savedProgress) {
+            const { current, total } = JSON.parse(savedProgress);
+            // 只有当总搜索数匹配时才恢复进度
+            if (total === totalSearches) {
+                currentSearchCount = current;
+            } else {
+                currentSearchCount = 0;
+            }
+        } else {
+            currentSearchCount = parseInt(localStorage.getItem('bingAutoSearchCount') || '0');
+        }
+        
         if (currentSearchCount >= totalSearches) {
             currentSearchCount = 0;
             localStorage.setItem('bingAutoSearchCount', '0');
+            localStorage.removeItem('bingAutoSearchProgress');
         }
         
         updateProgress(currentSearchCount, totalSearches);
@@ -559,11 +635,15 @@
         
         if (isPaused) {
             pauseBtn.textContent = '继续';
+            pauseBtn.style.backgroundColor = '#4caf50';
+            pauseBtn.style.boxShadow = '0 3px 8px rgba(76, 175, 80, 0.3)';
             updateStatus("已暂停");
             if (countdownInterval) clearInterval(countdownInterval);
         } else {
             pauseBtn.textContent = '暂停';
-            updateStatus("继续搜索");
+            pauseBtn.style.backgroundColor = '#ff9800';
+            pauseBtn.style.boxShadow = '0 3px 8px rgba(255, 152, 0, 0.3)';
+            updateStatus("继续搜索流程");
             performSearchCycle();
         }
     }
@@ -574,22 +654,43 @@
         isPaused = false;
         if (countdownInterval) clearInterval(countdownInterval);
         
-        // 重置按钮
-        document.getElementById('startSearchBtn').disabled = false;
-        document.getElementById('pauseSearchBtn').disabled = true;
-        document.getElementById('pauseSearchBtn').textContent = '暂停';
-        document.getElementById('stopSearchBtn').disabled = true;
+        // 重置按钮状态和样式
+        const startBtn = document.getElementById('startSearchBtn');
+        const pauseBtn = document.getElementById('pauseSearchBtn');
+        const stopBtn = document.getElementById('stopSearchBtn');
+        
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        stopBtn.disabled = true;
+        pauseBtn.textContent = '暂停';
+        pauseBtn.style.backgroundColor = '#ff9800';
+        pauseBtn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        pauseBtn.style.transform = 'scale(1)';
         
         // 重置状态
         updateStatus("已停止");
-        // 保留进度，下次可继续
-        updateProgress(currentSearchCount, totalSearches);
+        // 保存当前进度
+        updateProgress(currentSearchCount, sessionTotalSearches || 0);
+    }
+
+    // 页面加载时恢复进度显示
+    function restoreProgressOnLoad() {
+        const savedProgress = localStorage.getItem('bingAutoSearchProgress');
+        if (savedProgress) {
+            const { current, total } = JSON.parse(savedProgress);
+            if (document.getElementById('autoSearchProgress')) {
+                document.getElementById('autoSearchProgress').textContent = `进度: ${current}/${total}`;
+            }
+        }
     }
 
     // 页面加载完成后初始化
     window.addEventListener('load', () => {
+        // 检查是否已存在控制面板，避免重复创建
         if (!document.getElementById('autoSearchControlPanel')) {
             createControlPanel();
         }
+        // 恢复进度显示
+        restoreProgressOnLoad();
     });
 })();
