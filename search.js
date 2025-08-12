@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索（修复手机版）
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  修复手机浏览器卡住问题和控制面板不显示问题，确保搜索流程连贯
 // @author       Your Name
 // @match        https://cn.bing.com/*
@@ -720,7 +720,14 @@
                                         }
                                     }, 1000);
 
-                                    setTimeout(performSearchCycle, 1500);
+                                    // PC端也添加搜索结果浏览模拟
+                                    setTimeout(() => {
+                                        simulateSearchResultsBrowsing().then(() => {
+                                            // 搜索完成后立即更新进度显示
+                                            updateProgress(currentSearchCount + 1, totalSearches);
+                                            setTimeout(performSearchCycle, 1500);
+                                        });
+                                    }, 2000);
                                 }
                             }, Math.floor(Math.random() * 1500) + 500);
                         }
@@ -738,15 +745,14 @@
                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
                 window.location.href = searchUrl;
                 
-                if (detectDeviceType() === 'mobile') {
-                    setTimeout(() => {
-                        simulateSearchResultsBrowsing().then(() => {
-                            setTimeout(performSearchCycle, 1200);
-                        });
-                    }, 3000);
-                } else {
-                    setTimeout(performSearchCycle, 2000);
-                }
+                // 对于直接跳转URL的情况，PC和移动端都添加浏览模拟
+                setTimeout(() => {
+                    simulateSearchResultsBrowsing().then(() => {
+                        // 搜索完成后立即更新进度显示
+                        updateProgress(currentSearchCount + 1, totalSearches);
+                        setTimeout(performSearchCycle, 2000);
+                    });
+                }, 3000);
             }
         }, 500);
     }
@@ -856,7 +862,7 @@
         executeNextSearchStep();
     }
 
-    // 执行下一步搜索 - 修复变量名拼写错误
+    // 执行下一步搜索
     function executeNextSearchStep() {
         if (!isRunning || isPaused) return;
 
@@ -867,7 +873,7 @@
 
         const randomWord = getRandomItemAndRemove(hotWords);
         currentSearchCount++;
-        // 修复变量名拼写错误 totalSearchs -> totalSearches
+        // 立即更新进度显示
         updateProgress(currentSearchCount, totalSearches);
         performSearch(randomWord);
     }
@@ -1084,7 +1090,7 @@
         restoreStateOnLoad();
     });
 
-    // 手机浏览器模拟用户上下滑动页面浏览
+    // 模拟用户上下滑动页面浏览（同时支持PC和移动端）
     function simulateSearchResultsBrowsing() {
         return new Promise(resolve => {
             if (isPaused || !isRunning) {
@@ -1093,7 +1099,8 @@
             }
             updateStatus("正在浏览搜索结果...");
             const isMobile = detectDeviceType() === 'mobile';
-            const scrollSteps = isMobile ? Math.floor(Math.random() * 4) + 4 : Math.floor(Math.random() * 5) + 3;
+            // 为PC端设置不同的滑动参数
+            const scrollSteps = isMobile ? Math.floor(Math.random() * 4) + 4 : Math.floor(Math.random() * 6) + 4;
             const totalBrowseTime = isMobile ? Math.floor(Math.random() * 6000) + 6000 : Math.floor(Math.random() * 8000) + 8000;
             const intervalBetweenSteps = totalBrowseTime / scrollSteps;
             let step = 0;
@@ -1122,7 +1129,9 @@
                     document.documentElement.offsetHeight
                 );
                 let scrollPosition;
+                
                 if (isMobile) {
+                    // 移动端滑动逻辑保持不变
                     if (step % 2 === 0) {
                         direction = direction * -1;
                     }
@@ -1130,21 +1139,27 @@
                         ? maxScroll * (0.2 + Math.random() * 0.5)
                         : maxScroll * (0.1 + Math.random() * 0.2);
                 } else {
+                    // PC端滑动逻辑 - 更自然的浏览模式
                     if (step === 0) {
-                        scrollPosition = maxScroll * (0.2 + Math.random() * 0.1);
+                        // 第一步轻微下滑
+                        scrollPosition = maxScroll * (0.1 + Math.random() * 0.1);
                     } else if (step === scrollSteps - 1) {
+                        // 最后一步回到顶部
                         scrollPosition = 0;
                     } else if (Math.random() < 0.2) {
+                        // 偶尔向上滚动一点
                         const currentPos = window.scrollY;
-                        scrollPosition = Math.max(0, currentPos - maxScroll * (0.05 + Math.random() * 0.1));
+                        scrollPosition = Math.max(0, currentPos - maxScroll * (0.05 + Math.random() * 0.15));
                     } else {
+                        // 主要向下滚动，但有随机变化
                         const currentPos = window.scrollY;
                         scrollPosition = Math.min(
                             maxScroll * 0.9,
-                            currentPos + maxScroll * (0.08 + Math.random() * 0.15)
+                            currentPos + maxScroll * (0.1 + Math.random() * 0.2)
                         );
                     }
                 }
+                
                 window.scrollTo({ top: scrollPosition, behavior: 'smooth' });
                 step++;
             }, intervalBetweenSteps);
