@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.1
+// @version      v2.5.2
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
@@ -863,21 +863,12 @@
         updateStatus("已停止");
         updateProgress(currentSearchCount, sessionTotalSearches || 0);
 
-        // 彻底移除面板
-        const panel = document.getElementById('autoSearchControlPanel');
-        if (panel) panel.remove();
+        closeControlPanelAndScript();
+        // // 彻底移除面板
+        // const panel = document.getElementById('autoSearchControlPanel');
+        // if (panel) panel.remove();
     }
 
-    // 关闭面板和脚本
-    function closeControlPanelAndScript() {
-        scriptStopped = true;
-        stopSearch();
-        // 再次确保面板被移除
-        const panel1 = document.getElementById('autoSearchPanel');
-        const panel2 = document.getElementById('autoSearchControlPanel');
-        if (panel1) panel1.remove();
-        if (panel2) panel2.remove();
-    }
 
     // 页面加载时只负责恢复面板和进度，不再异步获取热词和初始化
     function restoreStateOnLoad() {
@@ -1101,6 +1092,7 @@
     if (typeof GM_registerMenuCommand === 'function') {
         // 确保菜单命令能���确触发面板显示
         GM_registerMenuCommand('显示控制面板', function () {
+            scriptStopped = false;
             // 强制创建并显示面板
             createControlPanel();
             // 确保面板在视口中可见
@@ -1114,12 +1106,6 @@
         GM_registerMenuCommand('关闭面板', function () {
             closeControlPanelAndScript();
         }, 'c');
-    }
-
-    // 控制面板显示函数
-    function showControlPanel() {
-        if (scriptStopped) return;
-        createControlPanel();
     }
 
     // 关闭面板和脚本
