@@ -1,8 +1,16 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.9
-// @description  确保搜索流程连贯
+// @version      v2.6.0
+// @description  这是一个用于国内必应（`https://cn.bing.com/`）的油猴自动搜索脚本。主要功能如下：  
+// 自动获取热词（支持PC和移动端），并自动填入搜索框进行搜索。
+// 每次搜索后模拟用户浏览搜索结果页（自动上下滑动页面）。
+// 支持搜索次数统计、进度显示、状态提示。
+// 提供控制面板，可一键开始、暂停、结束自动搜索。
+// 支持断点恢复，页面跳转后自动继续任务。
+// 兼容PC和移动端，界面自适应。
+// 通过菜单命令可随时显示/关闭控制面板。
+// 脚本适合需要自动完成必应搜索任务的用户，提升搜索流程的自动化和连贯性。
 // @author       Joker
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -550,8 +558,11 @@
 
     // 搜索循环
     async function performSearchCycle() {
-        currentSearchCount++;
-        updateProgress(currentSearchCount, totalSearches); // 搜索次数递增后立即刷新进度
+        if (!isOnBingHomepage()) {
+            currentSearchCount++;
+            // 搜索次数递增后立即刷新进度
+            updateProgress(currentSearchCount, totalSearches);
+        }
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
             const {
