@@ -1,16 +1,132 @@
 // ==UserScript==
-// @name         Bing自动搜索热词（类人行为模式）
+// @name         Bing自动搜索热榜（带手动控制）
 // @namespace    http://tampermonkey.net/
-// @version      0.4
-// @description  识别设备类型，模拟人类行为在Bing上自动搜索热词，降低被识别风险
+// @version      0.5
+// @description  带手动控制功能的Bing自动搜索脚本，可避免跨域访问提示
 // @author       Your Name
 // @match        https://www.bing.com/*
 // @icon         https://www.bing.com/favicon.ico
 // @grant        GM_xmlhttpRequest
+// @connect      top.baidu.com
+// @connect      www.toutiao.com
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    // 全局状态变量
+    let isRunning = false;
+    let isPaused = false;
+    let countdownInterval = null;
+    let currentSearchCount = 0;
+    let totalSearches = 0;
+    let hotWords = [];
+    let deviceType = '';
+
+    // 创建控制面板
+    function createControlPanel() {
+        const panel = document.createElement('div');
+        panel.style.position = 'fixed';
+        panel.style.top = '20px';
+        panel.style.right = '20px';
+        panel.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+        panel.style.border = '1px solid #ccc';
+        panel.style.borderRadius = '8px';
+        panel.style.padding = '15px';
+        panel.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+        panel.style.zIndex = '999999';
+        panel.style.width = '250px';
+        panel.id = 'autoSearchControlPanel';
+
+        // 标题
+        const title = document.createElement('h3');
+        title.textContent = 'Bing自动搜索控制';
+        title.style.margin = '0 0 10px 0';
+        title.style.fontSize = '16px';
+        title.style.textAlign = 'center';
+        panel.appendChild(title);
+
+        // 状态显示
+        const statusDiv = document.createElement('div');
+        statusDiv.id = 'autoSearchStatus';
+        statusDiv.style.margin = '0 0 10px 0';
+        statusDiv.style.padding = '8px';
+        statusDiv.style.backgroundColor = '#f5f5f5';
+        statusDiv.style.borderRadius = '4px';
+        statusDiv.style.textAlign = 'center';
+        statusDiv.textContent = '未运行';
+        panel.appendChild(statusDiv);
+
+        // 进度显示
+        const progressDiv = document.createElement('div');
+        progressDiv.id = 'autoSearchProgress';
+        progressDiv.style.margin = '0 0 15px 0';
+        progressDiv.style.textAlign = 'center';
+        progressDiv.textContent = '进度: 0/0';
+        panel.appendChild(progressDiv);
+
+        // 按钮容器
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.style.display = 'flex';
+        buttonsDiv.style.gap = '8px';
+        buttonsDiv.style.justifyContent = 'center';
+
+        // 开始按钮
+        const startBtn = document.createElement('button');
+        startBtn.id = 'startSearchBtn';
+        startBtn.textContent = '开始';
+        startBtn.style.padding = '6px 12px';
+        startBtn.style.backgroundColor = '#4CAF50';
+        startBtn.style.color = 'white';
+        startBtn.style.border = 'none';
+        startBtn.style.borderRadius = '4px';
+        startBtn.style.cursor = 'pointer';
+        startBtn.addEventListener('click', startSearch);
+        buttonsDiv.appendChild(startBtn);
+
+        // 暂停按钮
+        const pauseBtn = document.createElement('button');
+        pauseBtn.id = 'pauseSearchBtn';
+        pauseBtn.textContent = '暂停';
+        pauseBtn.style.padding = '6px 12px';
+        pauseBtn.style.backgroundColor = '#ff9800';
+        pauseBtn.style.color = 'white';
+        pauseBtn.style.border = 'none';
+        pauseBtn.style.borderRadius = '4px';
+        pauseBtn.style.cursor = 'pointer';
+        pauseBtn.disabled = true;
+        pauseBtn.addEventListener('click', togglePause);
+        buttonsDiv.appendChild(pauseBtn);
+
+        // 结束按钮
+        const stopBtn = document.createElement('button');
+        stopBtn.id = 'stopSearchBtn';
+        stopBtn.textContent = '结束';
+        stopBtn.style.padding = '6px 12px';
+        stopBtn.style.backgroundColor = '#f44336';
+        stopBtn.style.color = 'white';
+        stopBtn.style.border = 'none';
+        stopBtn.style.borderRadius = '4px';
+        stopBtn.style.cursor = 'pointer';
+        stopBtn.disabled = true;
+        stopBtn.addEventListener('click', stopSearch);
+        buttonsDiv.appendChild(stopBtn);
+
+        panel.appendChild(buttonsDiv);
+
+        // 添加到页面
+        document.body.appendChild(panel);
+    }
+
+    // 更新状态显示
+    function updateStatus(text) {
+        document.getElementById('autoSearchStatus').textContent = text;
+    }
+
+    // 更新进度显示
+    function updateProgress(current, total) {
+        document.getElementById('autoSearchProgress').textContent = `进度: ${current}/${total}`;
+    }
 
     // 检测设备类型（PC或移动设备）
     function detectDeviceType() {
@@ -119,9 +235,8 @@
         });
     }
 
-    // 随机生成指定范围内的整数（秒），增加一些更自然的波动
+    // 随机生成指定范围内的整数（秒）
     function getRandomDelay(min, max) {
-        // 10%的概率会生成更长的延迟，模拟用户中途做其他事情
         if (Math.random() < 0.1) {
             return Math.floor(Math.random() * (max * 2 - min * 1.5 + 1)) + Math.floor(min * 1.5);
         }
@@ -136,16 +251,25 @@
     // 模拟人类浏览行为：随机滚动页面
     function simulateBrowsing() {
         return new Promise(resolve => {
-            // 30%的概率执行浏览行为
+            if (isPaused || !isRunning) {
+                resolve();
+                return;
+            }
+            
             if (Math.random() < 0.3) {
                 console.log("模拟用户浏览行为...");
+                updateStatus("正在浏览页面...");
                 
-                // 随机决定滚动次数
                 const scrollTimes = Math.floor(Math.random() * 3) + 1;
                 let scrollCount = 0;
                 
                 const scrollInterval = setInterval(() => {
-                    // 随机滚动到页面的某个位置
+                    if (isPaused || !isRunning) {
+                        clearInterval(scrollInterval);
+                        resolve();
+                        return;
+                    }
+                    
                     const scrollPosition = Math.floor(Math.random() * document.body.scrollHeight * 0.8);
                     window.scrollTo({
                         top: scrollPosition,
@@ -155,7 +279,6 @@
                     scrollCount++;
                     if (scrollCount >= scrollTimes) {
                         clearInterval(scrollInterval);
-                        // 滚动结束后等待一小段时间
                         setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000);
                     }
                 }, Math.floor(Math.random() * 1500) + 1000);
@@ -168,11 +291,15 @@
     // 模拟人类点击行为：随机点击页面上的元素
     function simulateClicking() {
         return new Promise(resolve => {
-            // 20%的概率执行点击行为
+            if (isPaused || !isRunning) {
+                resolve();
+                return;
+            }
+            
             if (Math.random() < 0.2) {
                 console.log("模拟用户点击行为...");
+                updateStatus("正在点击页面元素...");
                 
-                // 可能点击的元素选择器
                 const clickableSelectors = [
                     'a[href]', 
                     'button', 
@@ -181,15 +308,13 @@
                     '#sb_form_q'    // 搜索框
                 ];
                 
-                // 随机选择一个选择器
                 const randomSelector = getRandomItem(clickableSelectors);
                 const elements = document.querySelectorAll(randomSelector);
                 
                 if (elements.length > 0) {
-                    // 随机选择一个元素点击
                     const randomElement = elements[Math.floor(Math.random() * elements.length)];
                     
-                    // 模拟鼠标移动到元素
+                    // 模拟鼠标移动
                     const rect = randomElement.getBoundingClientRect();
                     const mouseEvent = new MouseEvent('mousemove', {
                         clientX: rect.left + rect.width / 2,
@@ -198,10 +323,13 @@
                     });
                     randomElement.dispatchEvent(mouseEvent);
                     
-                    // 短暂延迟后点击
                     setTimeout(() => {
+                        if (isPaused || !isRunning) {
+                            resolve();
+                            return;
+                        }
+                        
                         randomElement.click();
-                        // 如果点击的是搜索结果，等待更长时间
                         if (randomSelector === '.b_algo h2 a') {
                             setTimeout(resolve, Math.floor(Math.random() * 5000) + 3000);
                         } else {
@@ -219,25 +347,34 @@
 
     // 执行搜索
     function performSearch(query) {
-        // 模拟用户输入搜索词
+        if (isPaused || !isRunning) return;
+        
         const searchBox = document.getElementById('sb_form_q');
         if (searchBox) {
-            // 先清空搜索框
+            updateStatus(`正在输入搜索词: ${query}`);
+            
+            // 清空搜索框
             searchBox.value = '';
             searchBox.dispatchEvent(new Event('input', { bubbles: true }));
             
-            // 逐个字符输入，模拟真实打字
+            // 逐个字符输入
             let i = 0;
             const typeInterval = setInterval(() => {
+                if (!isRunning || isPaused) {
+                    clearInterval(typeInterval);
+                    return;
+                }
+                
                 if (i < query.length) {
                     searchBox.value += query[i];
                     searchBox.dispatchEvent(new Event('input', { bubbles: true }));
                     i++;
                 } else {
                     clearInterval(typeInterval);
-                    // 输入完成后等待随机时间再提交
+                    // 输入完成后提交
                     setTimeout(() => {
-                        // 随机选择按回车或点击搜索按钮
+                        if (!isRunning || isPaused) return;
+                        
                         if (Math.random() < 0.7) {
                             searchBox.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', bubbles: true }));
                         } else {
@@ -247,101 +384,168 @@
                         }
                     }, Math.floor(Math.random() * 1500) + 500);
                 }
-            }, Math.floor(Math.random() * 150) + 50); // 打字速度变化
+            }, Math.floor(Math.random() * 150) + 50);
         } else {
-            // 如果找不到搜索框，直接跳转
             const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
             window.location.href = searchUrl;
         }
     }
 
-    // 主函数
-    async function startAutoSearch() {
-        const deviceType = detectDeviceType();
-        console.log(`检测到设备类型: ${deviceType}`);
-
-        let hotWords, totalSearches;
+    // 执行一次搜索循环
+    async function performSearchCycle() {
+        if (!isRunning || isPaused) return;
         
-        if (deviceType === 'pc') {
-            totalSearches = 40;
-            showStatusMessage('正在获取百度热榜...', deviceType, 0, totalSearches);
-            hotWords = await getPcHotWords();
-        } else {
-            totalSearches = 30;
-            showStatusMessage('正在获取今日头条热榜...', deviceType, 0, totalSearches);
-            hotWords = await getMobileHotWords();
-        }
-
-        let completedSearches = parseInt(localStorage.getItem('bingAutoSearchCount') || '0');
-        console.log(`已完成搜索次数: ${completedSearches}/${totalSearches}`);
-
-        if (completedSearches >= totalSearches) {
-            alert(`已完成${totalSearches}次搜索任务！`);
-            localStorage.setItem('bingAutoSearchCount', '0');
+        if (currentSearchCount >= totalSearches) {
+            updateStatus(`已完成所有${totalSearches}次搜索任务！`);
+            stopSearch();
+            alert(`已完成所有${totalSearches}次搜索任务！`);
             return;
         }
 
-        // 显示状态提示
-        const statusDiv = document.createElement('div');
-        statusDiv.style.position = 'fixed';
-        statusDiv.style.top = '20px';
-        statusDiv.style.left = '20px';
-        statusDiv.style.backgroundColor = 'rgba(0,0,0,0.7)';
-        statusDiv.style.color = 'white';
-        statusDiv.style.padding = '10px';
-        statusDiv.style.borderRadius = '5px';
-        statusDiv.style.zIndex = '99999';
-        statusDiv.id = 'autoSearchStatus';
-        document.body.appendChild(statusDiv);
-
-        // 生成随机延迟时间（5-30秒）
         const delaySeconds = getRandomDelay(5, 30);
-        console.log(`将在${delaySeconds}秒后进行第${completedSearches + 1}次搜索...`);
+        console.log(`将在${delaySeconds}秒后进行第${currentSearchCount + 1}次搜索...`);
+        updateStatus(`等待下次搜索: ${delaySeconds}秒`);
 
         // 倒计时更新
         let remaining = delaySeconds;
-        const countdownInterval = setInterval(() => {
-            statusDiv.textContent = `设备: ${deviceType === 'pc' ? '电脑' : '手机'} | 进度: ${completedSearches + 1}/${totalSearches} | 下次搜索: ${remaining}秒`;
+        countdownInterval = setInterval(() => {
+            if (!isRunning || isPaused) {
+                clearInterval(countdownInterval);
+                return;
+            }
+            
+            updateStatus(`等待下次搜索: ${remaining}秒`);
             remaining--;
             if (remaining < 0) clearInterval(countdownInterval);
         }, 1000);
 
         // 等待期间模拟人类行为
-        await new Promise(resolve => setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.6)));
+        await new Promise(resolve => {
+            if (isPaused || !isRunning) {
+                resolve();
+                return;
+            }
+            setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.6));
+        });
+        
+        if (isPaused || !isRunning) return;
+        
         await simulateBrowsing();
+        if (isPaused || !isRunning) return;
+        
         await simulateClicking();
-        await new Promise(resolve => setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.4)));
+        if (isPaused || !isRunning) return;
+        
+        await new Promise(resolve => {
+            if (isPaused || !isRunning) {
+                resolve();
+                return;
+            }
+            setTimeout(resolve, Math.floor(delaySeconds * 1000 * 0.4));
+        });
 
-        // 移除状态提示
-        document.getElementById('autoSearchStatus')?.remove();
+        if (isPaused || !isRunning) return;
 
         // 随机选择一个热词并搜索
         const randomWord = getRandomItem(hotWords);
-        console.log(`执行搜索: ${randomWord}`);
+        console.log(`执行第${currentSearchCount + 1}次搜索: ${randomWord}`);
         
-        // 更新已完成搜索次数
-        localStorage.setItem('bingAutoSearchCount', (completedSearches + 1).toString());
+        // 更新计数
+        currentSearchCount++;
+        localStorage.setItem('bingAutoSearchCount', currentSearchCount.toString());
+        updateProgress(currentSearchCount, totalSearches);
         
         // 执行搜索
         performSearch(randomWord);
     }
 
-    // 显示状态消息
-    function showStatusMessage(message, deviceType, completed, total) {
-        const statusDiv = document.createElement('div');
-        statusDiv.style.position = 'fixed';
-        statusDiv.style.top = '20px';
-        statusDiv.style.left = '20px';
-        statusDiv.style.backgroundColor = 'rgba(0,0,0,0.7)';
-        statusDiv.style.color = 'white';
-        statusDiv.style.padding = '10px';
-        statusDiv.style.borderRadius = '5px';
-        statusDiv.style.zIndex = '99999';
-        statusDiv.id = 'autoSearchStatus';
-        statusDiv.textContent = `设备: ${deviceType === 'pc' ? '电脑' : '手机'} | 进度: ${completed}/${total} | ${message}`;
-        document.body.appendChild(statusDiv);
+    // 开始搜索
+    async function startSearch() {
+        if (isRunning) return;
+        
+        isRunning = true;
+        isPaused = false;
+        
+        // 更新按钮状态
+        document.getElementById('startSearchBtn').disabled = true;
+        document.getElementById('pauseSearchBtn').disabled = false;
+        document.getElementById('stopSearchBtn').disabled = false;
+        
+        updateStatus("正在准备搜索...");
+        
+        // 检测设备类型
+        deviceType = detectDeviceType();
+        console.log(`检测到设备类型: ${deviceType}`);
+        
+        // 设置参数
+        if (deviceType === 'pc') {
+            totalSearches = 40;
+            updateStatus("正在获取百度热榜...");
+            hotWords = await getPcHotWords();
+        } else {
+            totalSearches = 30;
+            updateStatus("正在获取今日头条热榜...");
+            hotWords = await getMobileHotWords();
+        }
+        
+        // 获取当前进度
+        currentSearchCount = parseInt(localStorage.getItem('bingAutoSearchCount') || '0');
+        if (currentSearchCount >= totalSearches) {
+            currentSearchCount = 0;
+            localStorage.setItem('bingAutoSearchCount', '0');
+        }
+        
+        updateProgress(currentSearchCount, totalSearches);
+        updateStatus("准备就绪，开始搜索流程");
+        
+        // 开始第一次搜索循环
+        setTimeout(performSearchCycle, 1000);
     }
 
-    // 当页面加载完成后开始自动搜索流程
-    window.addEventListener('load', startAutoSearch);
+    // 暂停/继续搜索
+    function togglePause() {
+        if (!isRunning) return;
+        
+        isPaused = !isPaused;
+        const pauseBtn = document.getElementById('pauseSearchBtn');
+        
+        if (isPaused) {
+            pauseBtn.textContent = '继续';
+            updateStatus("已暂停");
+            if (countdownInterval) clearInterval(countdownInterval);
+        } else {
+            pauseBtn.textContent = '暂停';
+            updateStatus("继续搜索流程");
+            performSearchCycle();
+        }
+    }
+
+    // 停止搜索
+    function stopSearch() {
+        isRunning = false;
+        isPaused = false;
+        if (countdownInterval) clearInterval(countdownInterval);
+        
+        // 重置按钮状态
+        document.getElementById('startSearchBtn').disabled = false;
+        document.getElementById('pauseSearchBtn').disabled = true;
+        document.getElementById('stopSearchBtn').disabled = true;
+        document.getElementById('pauseSearchBtn').textContent = '暂停';
+        
+        // 重置进度
+        updateStatus("已停止");
+        updateProgress(0, 0);
+        
+        // 可选：保留进度或重置进度
+        // localStorage.setItem('bingAutoSearchCount', '0');
+        // currentSearchCount = 0;
+    }
+
+    // 页面加载完成后创建控制面板
+    window.addEventListener('load', () => {
+        // 检查是否已存在控制面板，避免重复创建
+        if (!document.getElementById('autoSearchControlPanel')) {
+            createControlPanel();
+        }
+    });
 })();
