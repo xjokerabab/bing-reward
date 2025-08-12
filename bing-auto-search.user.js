@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         国内必应自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.5.4
+// @version      v2.5.5
 // @description  修复首次启动需切换到首页问题，确保搜索流程连贯
 // @author       Joker
 // @match        https://cn.bing.com/*
@@ -27,12 +27,8 @@
     let hotWordFetchTimeout = null;
     let scrollInterval = null;
 
-    // 增加脚本关闭标志，默认关闭
-    let scriptStopped = true;
-
     // 创建控制面板 - 优化手机端显示位置和大小
     function createControlPanel() {
-        if (scriptStopped) return;
         // 先移除已存在的面板
         const existingPanel = document.getElementById('autoSearchControlPanel');
         if (existingPanel) {
@@ -436,7 +432,6 @@
 
     // 执行搜索
     function performSearch(query) {
-        if (scriptStopped) return;
         if (isPaused || !isRunning) return;
         if (!query || query.trim().length === 0) {
             console.error("无效的搜索词，跳过本次搜索");
@@ -573,7 +568,6 @@
 
     // 搜索循环
     function performSearchCycle() {
-        if (scriptStopped) return;
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
             const { isRunning: savedRunning, currentSearchCount: savedCount, totalSearches: savedTotal } = JSON.parse(savedState);
@@ -642,42 +636,6 @@
                 executeNextSearchStep();
             }, Math.floor(delaySeconds * 1000 * 0.4));
         }, Math.floor(delaySeconds * 1000 * 0.6));
-        
-        // await new Promise(resolve => {
-        //     if (isPaused || !isRunning) {
-        //         resolve();
-        //         return;
-        //     }
-        //     const waitTime = Math.floor(delaySeconds * 1000 * 0.6);
-        //     const timeoutId = setTimeout(resolve, waitTime);
-        //
-        //     const safetyCheck = setInterval(() => {
-        //         if (remaining <= 0 || !isRunning || isPaused) {
-        //             clearTimeout(timeoutId);
-        //             clearInterval(safetyCheck);
-        //             resolve();
-        //         }
-        //     }, 1000);
-        // });
-        //
-        // if (isPaused || !isRunning) return;
-        //
-        // await new Promise(resolve => {
-        //     if (isPaused || !isRunning) {
-        //         resolve();
-        //         return;
-        //     }
-        //     const waitTime = Math.floor(delaySeconds * 1000 * 0.4);
-        //     const timeoutId = setTimeout(resolve, waitTime);
-        //
-        //     const safetyCheck = setInterval(() => {
-        //         if (remaining <= 0 || !isRunning || isPaused) {
-        //             clearTimeout(timeoutId);
-        //             clearInterval(safetyCheck);
-        //             resolve();
-        //         }
-        //     }, 1000);
-        // });
 
         if (isPaused || !isRunning) return;
 
@@ -686,7 +644,6 @@
 
     // 执行下一步搜索
     function executeNextSearchStep() {
-        if (scriptStopped) return;
         if (!isRunning || isPaused) return;
 
         if (countdownInterval) {
@@ -709,7 +666,6 @@
 
     // 开始搜索
     function startSearch() {
-        if (scriptStopped) return;
         if (isRunning) return;
         isRunning = true;
         isPaused = false;
@@ -849,7 +805,6 @@
 
     // 停止搜索 - 彻底清理状态和移除面板
     function stopSearch() {
-        scriptStopped = true;
         isRunning = false;
         isPaused = false;
         if (countdownInterval) clearInterval(countdownInterval);
@@ -858,6 +813,7 @@
 
         localStorage.removeItem('bingAutoSearchState');
         localStorage.removeItem('bingAutoSearchProgress');
+        localStorage.removeItem('isBingAuto');
 
         const startBtn = document.getElementById('startSearchBtn');
         const pauseBtn = document.getElementById('pauseSearchBtn');
@@ -886,7 +842,6 @@
 
     // 页面加载时只负责恢复面板和进度，不再异步获取热词和初始化
     function restoreStateOnLoad() {
-        if (scriptStopped) return;
         const savedProgress = localStorage.getItem('bingAutoSearchProgress');
         if (savedProgress) {
             const { current, total } = JSON.parse(savedProgress);
@@ -969,7 +924,9 @@
 
     // 页面加载完成后初始化
     window.addEventListener('load', () => {
-        if (scriptStopped) return;
+        // 更简洁的转换方式
+        const bingAuto = localStorage.getItem('isBingAuto') === 'true';
+        if (!bingAuto) return;
         createControlPanel();
         restoreStateOnLoad();
         const savedState = localStorage.getItem('bingAutoSearchState');
@@ -1027,7 +984,6 @@
 
     // 模拟用户上下滑动页面浏览（同时支持PC和移动端）
     function simulateSearchResultsBrowsing() {
-        if (scriptStopped) return Promise.resolve();
         return new Promise(resolve => {
             if (isPaused || !isRunning) {
                 resolve();
@@ -1106,7 +1062,8 @@
     if (typeof GM_registerMenuCommand === 'function') {
         // 确保菜单命令能���确触发面板显示
         GM_registerMenuCommand('显示控制面板', function () {
-            scriptStopped = false;
+            // 存储布尔值（会自动转为字符串）
+            localStorage.setItem('isBingAuto', true);
             // 强制创建并显示面板
             createControlPanel();
             // 确保面板在视口中可见
@@ -1124,7 +1081,6 @@
 
     // 关闭面板和脚本
     function closeControlPanelAndScript() {
-        scriptStopped = true;
         stopSearch();
         // 再次确保面板被移除
         const panel1 = document.getElementById('autoSearchPanel');
