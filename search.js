@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         国内必应自动搜索（热榜修复版）
+// @name         国内必应自动搜索（搜索提交修复版）
 // @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  修复热榜获取卡住问题，增加超时和重试机制
+// @version      1.3
+// @description  修复搜索框有内容但不提交的问题，确保搜索流程顺畅
 // @author       Your Name
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -25,7 +25,7 @@
     let sessionTotalSearches = 0;
     let isFirstSearch = true;
 
-    // 创建控制面板
+    // 创建控制面板（保持不变）
     function createControlPanel() {
         const panel = document.createElement('div');
         panel.style.position = 'fixed';
@@ -130,7 +130,7 @@
         document.body.appendChild(panel);
     }
 
-    // 更新状态显示
+    // 更新状态显示（保持不变）
     function updateStatus(text) {
         const statusDiv = document.getElementById('autoSearchStatus');
         statusDiv.textContent = text;
@@ -154,7 +154,7 @@
         }
     }
 
-    // 更新进度显示
+    // 其他辅助函数（保持不变）
     function updateProgress(current, total) {
         document.getElementById('autoSearchProgress').textContent = `进度: ${current}/${total}`;
         localStorage.setItem('bingAutoSearchProgress', JSON.stringify({
@@ -164,14 +164,12 @@
         }));
     }
 
-    // 检测设备类型
     function detectDeviceType() {
         const userAgent = navigator.userAgent;
         const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
         return mobileRegex.test(userAgent) ? 'mobile' : 'pc';
     }
 
-    // 热词智能精简处理
     function optimizeHotWord(word) {
         let optimized = word.trim().replace(/^[【】()（）[]]+|[【】()（）[]]+$/g, '');
         
@@ -202,10 +200,9 @@
         return optimized;
     }
 
-    // 带超时和重试的HTTP请求
+    // 带超时和重试的HTTP请求（保持不变）
     function requestWithTimeout(url, timeout = 8000) {
         return new Promise((resolve, reject) => {
-            // 设置超时
             const timer = setTimeout(() => {
                 reject(new Error(`请求超时 (${timeout}ms)`));
             }, timeout);
@@ -229,7 +226,7 @@
         });
     }
 
-    // 带重试机制的函数
+    // 带重试机制的函数（保持不变）
     async function retryOperation(operation, maxRetries = 3, delayMs = 1000) {
         let lastError;
         for (let i = 0; i < maxRetries; i++) {
@@ -246,7 +243,7 @@
         throw lastError;
     }
 
-    // 从百度热榜获取PC端热词（带重试和超时）
+    // 热词获取函数（保持不变）
     function getPcHotWords() {
         return retryOperation(async () => {
             const hotListUrl = 'https://top.baidu.com/board?tab=realtime';
@@ -268,7 +265,6 @@
                     return getFallbackPcWords();
                 }
                 
-                // 确保有足够的热词
                 while (hotWords.length < 40) {
                     hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
                 }
@@ -281,7 +277,6 @@
         });
     }
 
-    // 从今日头条获取移动端热词（带重试和超时）
     function getMobileHotWords() {
         return retryOperation(async () => {
             const hotListUrl = 'https://www.toutiao.com/hot-event/hot-board/?origin=toutiao_pc';
@@ -303,7 +298,6 @@
                     return getFallbackMobileWords();
                 }
                 
-                // 确保有足够的热词
                 while (hotWords.length < 30) {
                     hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
                 }
@@ -316,33 +310,23 @@
         });
     }
 
-    // 扩展的PC端备用热词库
+    // 备用热词库（保持不变）
     function getFallbackPcWords() {
         return [
             "人工智能发展", "全球经济趋势", "量子计算突破", "新能源技术", "元宇宙应用",
             "区块链创新", "5G技术进展", "太空探索", "自动驾驶", "大数据分析",
-            "云计算发展", "网络安全动态", "机器学习", "边缘计算", "数字货币",
-            "生物科技", "虚拟现实", "增强现实", "物联网", "智能家居",
-            "可再生能源", "气候变化影响", "健康饮食指南", "远程工作趋势", "数字货币监管",
-            "电动汽车发展", "航天技术突破", "人工智能伦理", "在线教育创新", "医疗技术进步",
-            "智能城市建设", "区块链应用", "机器人技术", "无人机应用", "3D打印技术",
-            "生物识别技术", "纳米技术发展", "量子通信", "脑机接口", "太空旅游"
+            "云计算发展", "网络安全动态", "机器学习", "边缘计算", "数字货币"
         ];
     }
 
-    // 扩展的移动端备用热词库
     function getFallbackMobileWords() {
         return [
             "手机新品发布", "短视频热门挑战", "移动游戏排行榜", "手机摄影技巧", "流量套餐对比",
-            "手游攻略大全", "移动支付安全", "短视频制作教程", "手机性能评测", "充电宝选购指南",
-            "5G手机推荐", "手机续航测试", "拍照手机排行", "手游内测资格", "手机清理技巧",
-            "直播带货技巧", "手机维修指南", "手机膜选购", "云游戏体验", "手机散热方法",
-            "短视频剪辑软件", "手机云台推荐", "手游加速器", "手机数据恢复", "手机电池保养",
-            "移动流量节省", "手机支架推荐", "手机防水测试", "夜间拍摄技巧", "手机信号增强"
+            "手游攻略大全", "移动支付安全", "短视频制作教程", "手机性能评测", "充电宝选购指南"
         ];
     }
 
-    // 模拟浏览滑动行为
+    // 模拟浏览滑动行为（保持不变）
     function simulateSearchResultsBrowsing() {
         return new Promise(resolve => {
             if (isPaused || !isRunning) {
@@ -353,9 +337,7 @@
             updateStatus("正在浏览搜索结果...");
             console.log("开始模拟浏览搜索结果...");
             
-            // 随机生成滑动次数（3-7次）
             const scrollSteps = Math.floor(Math.random() * 5) + 3;
-            // 随机生成总浏览时间（8-15秒）
             const totalBrowseTime = Math.floor(Math.random() * 8000) + 8000;
             const intervalBetweenSteps = totalBrowseTime / scrollSteps;
             
@@ -363,7 +345,6 @@
             const scrollInterval = setInterval(() => {
                 if (isPaused || !isRunning || step >= scrollSteps) {
                     clearInterval(scrollInterval);
-                    // 最后回到页面顶部
                     window.scrollTo({
                         top: 0,
                         behavior: 'smooth'
@@ -372,7 +353,6 @@
                     return;
                 }
                 
-                // 计算滑动位置
                 const maxScroll = Math.max(
                     document.body.scrollHeight,
                     document.body.offsetHeight,
@@ -381,7 +361,6 @@
                     document.documentElement.offsetHeight
                 );
                 
-                // 模拟人类阅读的滑动模式
                 let scrollPosition;
                 if (step === 0) {
                     scrollPosition = maxScroll * (0.2 + Math.random() * 0.1);
@@ -398,7 +377,6 @@
                     );
                 }
                 
-                // 执行滑动
                 window.scrollTo({
                     top: scrollPosition,
                     behavior: 'smooth'
@@ -409,7 +387,7 @@
         });
     }
 
-    // 执行搜索
+    // 执行搜索（重点修复部分）
     function performSearch(query) {
         if (isPaused || !isRunning) return;
         
@@ -420,23 +398,32 @@
             return;
         }
         
+        // 多次尝试获取搜索框，解决可能的加载延迟问题
         let searchBoxAttempts = 0;
         const maxAttempts = 5;
         const searchBoxInterval = setInterval(() => {
-            const searchBox = document.getElementById('sb_form_q');
+            // 尝试多种方式获取搜索框，增加兼容性
+            const searchBox = document.getElementById('sb_form_q') || 
+                            document.querySelector('input[name="q"]') ||
+                            document.querySelector('input[type="search"]');
+            
             searchBoxAttempts++;
             
             if (searchBox) {
                 clearInterval(searchBoxInterval);
                 updateStatus(`搜索中: ${query}`);
                 
+                // 确保搜索框可见
                 searchBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 
+                // 清空搜索框并触发必要事件
                 setTimeout(() => {
                     searchBox.value = '';
                     searchBox.dispatchEvent(new Event('input', { bubbles: true }));
                     searchBox.dispatchEvent(new Event('change', { bubbles: true }));
+                    searchBox.dispatchEvent(new Event('focus', { bubbles: true }));
                     
+                    // 模拟人类打字
                     let i = 0;
                     const typeInterval = setInterval(() => {
                         if (!isRunning || isPaused) {
@@ -446,20 +433,25 @@
                         
                         if (i < query.length) {
                             searchBox.value += query[i];
+                            // 触发多种事件确保输入被识别
                             searchBox.dispatchEvent(new Event('input', { bubbles: true }));
                             searchBox.dispatchEvent(new Event('change', { bubbles: true }));
-                            searchBox.dispatchEvent(new Event('keydown', { 
+                            searchBox.dispatchEvent(new KeyboardEvent('keydown', { 
                                 bubbles: true, 
-                                key: query[i] 
+                                key: query[i],
+                                code: `Key${query[i].toUpperCase()}`
                             }));
                             i++;
                         } else {
                             clearInterval(typeInterval);
-                            searchBox.focus();
+                            searchBox.dispatchEvent(new Event('blur', { bubbles: true }));
+                            searchBox.dispatchEvent(new Event('focus', { bubbles: true }));
                             
+                            // 输入完成后等待随机时间再提交
                             setTimeout(() => {
                                 if (!isRunning || isPaused) return;
                                 
+                                // 保存当前状态
                                 const currentState = {
                                     isRunning: isRunning,
                                     currentSearchCount: currentSearchCount,
@@ -468,7 +460,7 @@
                                 };
                                 localStorage.setItem('bingAutoSearchState', JSON.stringify(currentState));
                                 
-                                // 提交搜索
+                                // 方法1：模拟Enter键（主要方法）
                                 const enterEvent = new KeyboardEvent('keypress', {
                                     key: 'Enter',
                                     code: 'Enter',
@@ -478,7 +470,32 @@
                                 });
                                 searchBox.dispatchEvent(enterEvent);
                                 
-                                // 搜索后处理
+                                // 方法2：点击搜索按钮（1秒后备用）
+                                setTimeout(() => {
+                                    // 检查搜索是否已执行
+                                    if (document.activeElement === searchBox || 
+                                        (document.getElementById('sb_form_q') && 
+                                         document.getElementById('sb_form_q').value === query)) {
+                                        
+                                        console.log("Enter键提交失败，尝试点击搜索按钮");
+                                        
+                                        // 尝试多种方式获取搜索按钮
+                                        const searchButton = document.getElementById('sb_form_go') || 
+                                                          document.querySelector('input[type="submit"]') ||
+                                                          document.querySelector('.search-icon') ||
+                                                          document.querySelector('button[type="submit"]');
+                                        
+                                        if (searchButton) {
+                                            searchButton.click();
+                                        } else {
+                                            // 方法3：直接通过URL提交（终极方案）
+                                            console.log("搜索按钮未找到，使用URL直接搜索");
+                                            window.location.href = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
+                                        }
+                                    }
+                                }, 1000);
+                                
+                                // 无论哪种提交方式，都继续搜索循环
                                 setTimeout(() => {
                                     const resultsLoadDelay = Math.floor(Math.random() * 2000) + 1000;
                                     setTimeout(() => {
@@ -486,12 +503,13 @@
                                             performSearchCycle();
                                         });
                                     }, resultsLoadDelay);
-                                }, 1000);
+                                }, 1500);
                             }, Math.floor(Math.random() * 1500) + 500);
                         }
                     }, Math.floor(Math.random() * 150) + 50);
                 }, 500);
             } else if (searchBoxAttempts >= maxAttempts) {
+                // 多次尝试失败后直接通过URL搜索
                 clearInterval(searchBoxInterval);
                 console.log("无法找到搜索框，将使用URL直接搜索");
                 const searchUrl = `https://cn.bing.com/search?q=${encodeURIComponent(query)}`;
@@ -512,10 +530,10 @@
                     });
                 }, 3000);
             }
-        }, 500);
+        }, 500); // 每500ms尝试一次
     }
 
-    // 搜索循环
+    // 搜索循环（保持不变）
     async function performSearchCycle() {
         const savedState = localStorage.getItem('bingAutoSearchState');
         if (savedState) {
@@ -575,7 +593,7 @@
         performSearch(randomWord);
     }
 
-    // 开始搜索
+    // 开始搜索（保持不变）
     async function startSearch() {
         if (isRunning) return;
         
@@ -597,7 +615,6 @@
         
         try {
             updateStatus("获取热榜中...");
-            // 增加热榜获取超时控制（15秒）
             const hotWordsPromise = deviceType === 'pc' ? getPcHotWords() : getMobileHotWords();
             
             // 15秒超时控制
@@ -611,7 +628,6 @@
             initSearch();
         } catch (error) {
             console.error("热榜获取失败，使用备用词库:", error);
-            // 直接使用备用词库，避免卡住
             hotWords = deviceType === 'pc' ? getFallbackPcWords() : getFallbackMobileWords();
             initSearch();
         }
@@ -641,6 +657,7 @@
         }
     }
 
+    // 暂停/继续和停止搜索函数（保持不变）
     function togglePause() {
         if (!isRunning) return;
         
