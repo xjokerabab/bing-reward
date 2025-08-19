@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         必应积分自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.6.3
-// @description  必应的油猴自动搜索脚本。主要功能如下：1、自动获取热词（支持PC和移动端），并自动填入搜索框进行搜索。2、每次搜索后模拟用户浏览搜索结果页（自动上下滑动页面）。3、支持搜索次数统计、进度显示、状态提示。4、提供控制面板，可一键开始、暂停、结束自动搜索。5、支持断点恢复，页面跳转后自动继续任务。6、兼容PC和移动端，界面自适应。7、通过菜单命令可随时显示/关闭控制面板。
+// @version      v2.6.4
+// @description  必应的油猴自动搜索脚本。主要功能如下：1、PC（百度热榜、微博热榜、掘金热榜、腾讯新闻热榜）和移动端（今日头条热榜、36氪热榜、网易新闻热榜）自动获取热词，并自动填入搜索框进行搜索。2、每次搜索后模拟用户浏览搜索结果页（自动上下滑动页面）。3、支持搜索次数统计、进度显示、状态提示。4、提供控制面板，可一键开始、暂停、结束自动搜索。5、支持断点恢复，页面跳转后自动继续任务。6、兼容PC和移动端，界面自适应。7、通过菜单命令可随时显示/关闭控制面板。
 // @author       Joker
 // @match        https://cn.bing.com/*
 // @icon         https://cn.bing.com/favicon.ico
@@ -244,8 +244,60 @@
         return optimized;
     }
 
-    // 从百度热榜获取PC端热词（同步）
-    function getPcHotWordsSync() {
+    // 腾讯新闻热榜（PC）
+    function getTencentHotWords() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=tencent-news&sub_tab=hot&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.title && item.title.trim().length > 0)
+                        .map(item => optimizeHotWord(item.title))
+                        .filter(word => word.length >= 3);
+                }
+            } catch (e) {
+                hotWords = getFallbackPcWords();
+            }
+        } else {
+            hotWords = getFallbackPcWords();
+        }
+        return hotWords;
+    }
+
+    // 掘金热榜（PC）
+    function getJuejinHotWords() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=juejin&sub_tab=all&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.title && item.title.trim().length > 0)
+                        .map(item => optimizeHotWord(item.title))
+                        .filter(word => word.length >= 3);
+                }
+            } catch (e) {
+                hotWords = getFallbackPcWords();
+            }
+        } else {
+            hotWords = getFallbackPcWords();
+        }
+        return hotWords;
+    }
+
+    // 百度热榜（PC）
+    function getBaiduHotWords() {
         let hotWords = [];
         const hotListUrl = 'https://api.rebang.today/v1/items?tab=baidu&sub_tab=realtime&page=1&version=1';
         const xhr = new XMLHttpRequest();
@@ -260,13 +312,6 @@
                         .filter(item => item && item.word && item.word.trim().length > 0)
                         .map(item => optimizeHotWord(item.word))
                         .filter(word => word.length >= 3);
-                    if (hotWords.length < 40) {
-                        while (hotWords.length < 40) {
-                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
-                        }
-                    } else {
-                        hotWords = hotWords.slice(0, 40);
-                    }
                 }
             } catch (e) {
                 hotWords = getFallbackPcWords();
@@ -277,41 +322,8 @@
         return hotWords;
     }
 
-    // 从今日头条API获取移动端热词（同步）
-    function getMobileHotWordsSync() {
-        let hotWords = [];
-        const hotListUrl = 'https://api.rebang.today/v1/items?tab=top&sub_tab=lasthour&page=1&version=1';
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', hotListUrl, false);
-        xhr.send();
-        if (xhr.status === 200) {
-            try {
-                const result = JSON.parse(xhr.responseText);
-                if (result.code === 200 && result.data && result.data.list) {
-                    let items = JSON.parse(result.data.list);
-                    hotWords = items
-                        .filter(item => item && item.title && item.title.trim().length > 0)
-                        .map(item => optimizeHotWord(item.title))
-                        .filter(word => word.length >= 2);
-                    if (hotWords.length < 30) {
-                        while (hotWords.length < 30) {
-                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
-                        }
-                    } else {
-                        hotWords = hotWords.slice(0, 30);
-                    }
-                }
-            } catch (e) {
-                hotWords = getFallbackMobileWords();
-            }
-        } else {
-            hotWords = getFallbackMobileWords();
-        }
-        return hotWords;
-    }
-
-    // 微博热搜（同步）
-    function getWeiboHotWordsSync() {
+    // 微博热搜（PC）
+    function getWeiboHotWords() {
         let hotWords = [];
         const hotListUrl = 'https://api.rebang.today/v1/items?tab=top&sub_tab=lasthour&page=1&version=1';
         const xhr = new XMLHttpRequest();
@@ -326,13 +338,13 @@
                         .filter(item => item && item.title && item.title.trim().length > 0)
                         .map(item => optimizeHotWord(item.title))
                         .filter(word => word.length >= 3);
-                    if (hotWords.length < 40) {
-                        while (hotWords.length < 40) {
-                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
-                        }
-                    } else {
-                        hotWords = hotWords.slice(0, 40);
-                    }
+                    // if (hotWords.length < 40) {
+                    //     while (hotWords.length < 40) {
+                    //         hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 40 - hotWords.length)));
+                    //     }
+                    // } else {
+                    //     hotWords = hotWords.slice(0, 40);
+                    // }
                 }
             } catch (e) {
             }
@@ -340,8 +352,61 @@
         return hotWords;
     }
 
-    // 36氪热搜（同步）
-    function get36krHotWordsSync() {
+
+    // 今日头条热榜（移动）
+    function getTopHotWords() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=toutiao&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.title && item.title.trim().length > 0)
+                        .map(item => optimizeHotWord(item.title))
+                        .filter(word => word.length >= 2);
+                }
+            } catch (e) {
+                hotWords = getFallbackMobileWords();
+            }
+        } else {
+            hotWords = getFallbackMobileWords();
+        }
+        return hotWords;
+    }
+
+    // 网易新闻热榜（移动）
+    function getNeNewHotWords() {
+        let hotWords = [];
+        const hotListUrl = 'https://api.rebang.today/v1/items?tab=ne-news&sub_tab=htd&page=1&version=1';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', hotListUrl, false);
+        xhr.send();
+        if (xhr.status === 200) {
+            try {
+                const result = JSON.parse(xhr.responseText);
+                if (result.code === 200 && result.data && result.data.list) {
+                    let items = JSON.parse(result.data.list);
+                    hotWords = items
+                        .filter(item => item && item.title && item.title.trim().length > 0)
+                        .map(item => optimizeHotWord(item.title))
+                        .filter(word => word.length >= 2);
+                }
+            } catch (e) {
+                hotWords = getFallbackMobileWords();
+            }
+        } else {
+            hotWords = getFallbackMobileWords();
+        }
+        return hotWords;
+    }
+
+    // 36氪热搜（移动）
+    function get36krHotWords() {
         let hotWords = [];
         const hotListUrl = 'https://api.rebang.today/v1/items?tab=36kr&sub_tab=hotlist&page=1&version=1';
         const xhr = new XMLHttpRequest();
@@ -356,13 +421,13 @@
                         .filter(item => item && item.title && item.title.trim().length > 0)
                         .map(item => optimizeHotWord(item.title))
                         .filter(word => word.length >= 2);
-                    if (hotWords.length < 30) {
-                        while (hotWords.length < 30) {
-                            hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
-                        }
-                    } else {
-                        hotWords = hotWords.slice(0, 30);
-                    }
+                    // if (hotWords.length < 30) {
+                    //     while (hotWords.length < 30) {
+                    //         hotWords.push(...hotWords.slice(0, Math.min(hotWords.length, 30 - hotWords.length)));
+                    //     }
+                    // } else {
+                    //     hotWords = hotWords.slice(0, 30);
+                    // }
                 }
             } catch (e) {
             }
@@ -372,24 +437,36 @@
 
     // 随机获取PC热词（同步）
     function getRandomPcHotWordsSync() {
-        const sources = [getPcHotWordsSync, getWeiboHotWordsSync];
-        const idx = Math.random() < 0.5 ? 0 : 1;
+        const sources = [getBaiduHotWords, getWeiboHotWords, getTencentHotWords,getJuejinHotWords];
+        const idx = Math.floor(Math.random() * sources.length);
         let words = sources[idx]();
         if (!words || words.length === 0) {
-            words = sources[1 - idx]();
+            // 尝试其他两个方法
+            for (let i = 0; i < sources.length; i++) {
+                if (i !== idx) {
+                    words = sources[i]();
+                    if (words && words.length > 0) break;
+                }
+            }
         }
         return words.length > 0 ? words : getFallbackPcWords();
     }
 
     // 随机获取移动热词（同步）
     function getRandomMobileHotWordsSync() {
-        const sources = [getMobileHotWordsSync, get36krHotWordsSync];
-        const idx = Math.random() < 0.5 ? 0 : 1;
+        const sources = [getTopHotWords, get36krHotWords, getNeNewHotWords];
+        const idx = Math.floor(Math.random() * sources.length);
         let words = sources[idx]();
         if (!words || words.length === 0) {
-            words = sources[1 - idx]();
+            // 尝试其他两个方法
+            for (let i = 0; i < sources.length; i++) {
+                if (i !== idx) {
+                    words = sources[i]();
+                    if (words && words.length > 0) break;
+                }
+            }
         }
-        return words.length > 0 ? words : getFallbackMobileWords();
+        return words && words.length > 0 ? words : getFallbackMobileWords();
     }
 
     // 全局备用热词
@@ -776,7 +853,7 @@
         if (countdownInterval) clearInterval(countdownInterval);
         if (scrollInterval) clearInterval(scrollInterval);
         clearTimeout(hotWordFetchTimeout);
-        
+
         updateStatus("已停止");
         updateProgress(currentSearchCount, sessionTotalSearches || 0);
 
