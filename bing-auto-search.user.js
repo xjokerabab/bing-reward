@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         必应积分自动搜索
 // @namespace    http://tampermonkey.net/
-// @version      v2.6.4
+// @version      v2.6.5
 // @description  必应的油猴自动搜索脚本。主要功能如下：1、PC（百度热榜、微博热榜、掘金热榜、腾讯新闻热榜）和移动端（今日头条热榜、36氪热榜、网易新闻热榜）自动获取热词，并自动填入搜索框进行搜索。2、每次搜索后模拟用户浏览搜索结果页（自动上下滑动页面）。3、支持搜索次数统计、进度显示、状态提示。4、提供控制面板，可一键开始、暂停、结束自动搜索。5、支持断点恢复，页面跳转后自动继续任务。6、兼容PC和移动端，界面自适应。7、通过菜单命令可随时显示/关闭控制面板。
 // @author       Joker
 // @match        https://cn.bing.com/*
+// @license      GNU GPLv3
 // @icon         https://cn.bing.com/favicon.ico
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
